@@ -59,7 +59,11 @@ import com.skylake.skytv.jgorunner.ui.components.JTVModeSelectorPopup
 import com.skylake.skytv.jgorunner.ui.components.LoginPopup
 import com.skylake.skytv.jgorunner.ui.components.ProgressPopup
 import com.skylake.skytv.jgorunner.ui.components.RedirectPopup
+import com.google.gson.Gson
+import com.skylake.skytv.jgorunner.services.player.ExoPlayJet
 import com.skylake.skytv.jgorunner.ui.screens.CastScreen
+import com.skylake.skytv.jgorunner.ui.screens.CloudHomeScreen
+import com.skylake.skytv.jgorunner.ui.screens.CloudMainScreen
 import com.skylake.skytv.jgorunner.ui.screens.DebugScreen
 import com.skylake.skytv.jgorunner.ui.screens.HomeScreen
 import com.skylake.skytv.jgorunner.ui.screens.InfoScreen
@@ -68,6 +72,7 @@ import com.skylake.skytv.jgorunner.ui.screens.LoginScreenPop
 import com.skylake.skytv.jgorunner.ui.screens.RunnerScreen
 import com.skylake.skytv.jgorunner.ui.screens.SettingsScreen
 import com.skylake.skytv.jgorunner.ui.screens.ZoneScreen
+import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import com.skylake.skytv.jgorunner.ui.theme.JGOTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -93,7 +98,9 @@ class MainActivity : ComponentActivity() {
 
     // SharedPreferences for saving binary selection
     private var outputText by mutableStateOf("ℹ️ Output logs")
-    private var currentScreen by mutableStateOf("Zone") // Default to the new TV UI
+    private var currentScreen by mutableStateOf("CloudHome") // Default to the new Cloud UI
+
+    private var selectedCloudServer by mutableStateOf<CloudServer?>(null)
 
     private val executor = Executors.newSingleThreadExecutor()
     private var showBinaryUpdatePopup by mutableStateOf(false)
@@ -152,9 +159,10 @@ class MainActivity : ComponentActivity() {
         if (isTvZoneSelected) {
             preferenceManager.myPrefs.autoStartIPTV = false
         }
-        if (shouldOpenZoneOnStart) {
-            currentScreen = "Zone"
-        }
+        // Cloud UI is now the default startup interface
+        // if (shouldOpenZoneOnStart) {
+        //     currentScreen = "Zone"
+        // }
 
         if (preferenceManager.myPrefs.jtvGoBinaryVersion?.contains(
                 "develop",
@@ -254,9 +262,9 @@ class MainActivity : ComponentActivity() {
 
         // Keep startup landing consistent for TVZone users.
         // If startup is still on Home after setup checks, route to Zone.
-        if (shouldOpenZoneOnStart && currentScreen == "Home") {
-            currentScreen = "Zone"
-        }
+        // if (shouldOpenZoneOnStart && currentScreen == "Home") {
+        //     currentScreen = "Zone"
+        // }
 
         if (isServerRunning) {
             BinaryService.instance?.binaryOutput?.observe(this) {
@@ -484,6 +492,39 @@ class MainActivity : ComponentActivity() {
                             .padding(innerPadding)
                     ) {
                         when (currentScreen) {
+                            "CloudHome" -> CloudHomeScreen(
+                                context = this@MainActivity,
+                                onNavigate = { currentScreen = it },
+                                onServerSelected = { server ->
+                                    selectedCloudServer = server
+                                    preferenceManager.myPrefs.lastCloudServerUrl = server.url
+                                    preferenceManager.myPrefs.lastCloudServerName = server.name
+                                    preferenceManager.savePreferences()
+                                    currentScreen = "CloudMain"
+                                }
+                            )
+
+                            "CloudMain" -> CloudMainScreen(
+                                context = this@MainActivity,
+                                initialServer = selectedCloudServer,
+                                onNavigate = { currentScreen = it },
+                                onPlayChannel = { channel, list ->
+                                    preferenceManager.myPrefs.lastCloudPlayedChannelId = channel.id
+                                    preferenceManager.savePreferences()
+
+                                    val channelIndex = list.indexOf(channel)
+                                    val intent = Intent(this@MainActivity, ExoPlayJet::class.java).apply {
+                                        putExtra("video_url", channel.mpdUrl ?: channel.m3u8Url)
+                                        putExtra("ch_name", channel.name)
+                                        putExtra("logo_url", channel.logo)
+                                        putExtra("cloud_channel_json", Gson().toJson(channel))
+                                        putExtra("cloud_channel_list_json", Gson().toJson(list))
+                                        putExtra("current_cloud_channel_index", channelIndex)
+                                    }
+                                    startActivity(intent)
+                                }
+                            )
+
                             "Home" -> HomeScreen(
                                 title = selectedBinaryName,
                                 titleShouldGlow = isGlowBox,
@@ -764,6 +805,14 @@ class MainActivity : ComponentActivity() {
 
                 "Zone" -> {
                     currentScreen = "Debug"
+                }
+
+                "CloudHome" -> {
+                    finish()
+                }
+
+                "CloudMain" -> {
+                    currentScreen = "CloudHome"
                 }
 
                 else -> {

@@ -20,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.skylake.skytv.jgorunner.activities.ChannelInfo
+import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.activities.WebPlayerActivity
 import com.skylake.skytv.jgorunner.core.data.JTVConfigurationManager
 import com.skylake.skytv.jgorunner.data.SkySharedPref
@@ -46,6 +47,9 @@ class ExoPlayJet : ComponentActivity() {
     private var channelListState by mutableStateOf<ArrayList<ChannelInfo>?>(null)
     private var currentChannelIndexState by mutableIntStateOf(-1)
 
+    private var cloudChannelListState by mutableStateOf<List<CloudChannel>?>(null)
+    private var currentCloudChannelState by mutableStateOf<CloudChannel?>(null)
+
     private val prefManager by lazy { SkySharedPref.getInstance(this) }
     private val pipController by lazy { PipController(this) }
 
@@ -64,7 +68,9 @@ class ExoPlayJet : ComponentActivity() {
                     preferenceManager = prefManager,
                     videoUrl = videoUrlState,
                     channelList = channelListState,
-                    currentChannelIndex = currentChannelIndexState
+                    currentChannelIndex = currentChannelIndexState,
+                    cloudChannelList = cloudChannelListState,
+                    currentCloudChannel = currentCloudChannelState
                 )
             }
         }
@@ -175,6 +181,22 @@ class ExoPlayJet : ComponentActivity() {
         signatureFallbackState = parsed.signature ?: "0x0"
         channelListState = parsed.channelList
         currentChannelIndexState = parsed.currentChannelIndex
+
+        val cloudJson = intent?.getStringExtra("cloud_channel_json")
+        if (!cloudJson.isNullOrEmpty()) {
+            currentCloudChannelState = Gson().fromJson(cloudJson, CloudChannel::class.java)
+        }
+
+        val cloudListJson = intent?.getStringExtra("cloud_channel_list_json")
+        if (!cloudListJson.isNullOrEmpty()) {
+            val type = object : TypeToken<List<CloudChannel>>() {}.type
+            cloudChannelListState = Gson().fromJson(cloudListJson, type)
+        }
+
+        val cloudIdx = intent?.getIntExtra("current_cloud_channel_index", -1) ?: -1
+        if (cloudIdx != -1) {
+            currentChannelIndexState = cloudIdx
+        }
         if (channelListState.isNullOrEmpty()) {
             channelListState = loadChannelListFromCache(intent)
         }
