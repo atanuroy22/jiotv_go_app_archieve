@@ -50,6 +50,7 @@ import com.skylake.skytv.jgorunner.core.update.DownloadModelNew
 import com.skylake.skytv.jgorunner.core.update.DownloadProgress
 import com.skylake.skytv.jgorunner.core.update.SemanticVersionNew
 import com.skylake.skytv.jgorunner.core.update.Status
+import com.skylake.skytv.jgorunner.data.CloudDataManager
 import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.services.BinaryService
 import com.skylake.skytv.jgorunner.services.player.LandingPage
@@ -512,13 +513,15 @@ class MainActivity : ComponentActivity() {
                                     preferenceManager.myPrefs.lastCloudPlayedChannelId = channel.id
                                     preferenceManager.savePreferences()
 
+                                    // Use shared manager to avoid TransactionTooLargeException
+                                    CloudDataManager.currentChannelList = list
                                     val channelIndex = list.indexOf(channel)
+
                                     val intent = Intent(this@MainActivity, ExoPlayJet::class.java).apply {
                                         putExtra("video_url", channel.mpdUrl ?: channel.m3u8Url)
                                         putExtra("ch_name", channel.name)
                                         putExtra("logo_url", channel.logo)
                                         putExtra("cloud_channel_json", Gson().toJson(channel))
-                                        putExtra("cloud_channel_list_json", Gson().toJson(list))
                                         putExtra("current_cloud_channel_index", channelIndex)
                                     }
                                     startActivity(intent)
@@ -556,6 +559,9 @@ class MainActivity : ComponentActivity() {
                                 onRunIPTVButtonClick = {
                                     iptvRedirectFunc2()
 //                                    launchIPTV()
+                                },
+                                onCloudPlayButtonClick = {
+                                    currentScreen = "CloudHome"
                                 },
                                 onWebTVButtonClick = {
                                     val intent =

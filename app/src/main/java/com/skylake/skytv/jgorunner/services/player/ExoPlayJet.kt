@@ -20,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.skylake.skytv.jgorunner.activities.ChannelInfo
+import com.skylake.skytv.jgorunner.data.CloudDataManager
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.activities.WebPlayerActivity
 import com.skylake.skytv.jgorunner.core.data.JTVConfigurationManager
@@ -187,11 +188,7 @@ class ExoPlayJet : ComponentActivity() {
             currentCloudChannelState = Gson().fromJson(cloudJson, CloudChannel::class.java)
         }
 
-        val cloudListJson = intent?.getStringExtra("cloud_channel_list_json")
-        if (!cloudListJson.isNullOrEmpty()) {
-            val type = object : TypeToken<List<CloudChannel>>() {}.type
-            cloudChannelListState = Gson().fromJson(cloudListJson, type)
-        }
+        cloudChannelListState = CloudDataManager.currentChannelList
 
         val cloudIdx = intent?.getIntExtra("current_cloud_channel_index", -1) ?: -1
         if (cloudIdx != -1) {
