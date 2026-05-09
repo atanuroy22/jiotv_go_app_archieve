@@ -120,6 +120,7 @@ import coil.request.ImageRequest
 import com.skylake.skytv.jgorunner.R
 import com.skylake.skytv.jgorunner.activities.ChannelInfo
 import com.skylake.skytv.jgorunner.data.SkySharedPref
+import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.receivers.PipActionReceiver
 import com.skylake.skytv.jgorunner.services.player.PlayerCommandBus
 import com.skylake.skytv.jgorunner.ui.tvhome.ChannelUtils
@@ -157,8 +158,10 @@ const val TAG = "ExoJetScreen"
 fun ExoPlayJetScreen(
     preferenceManager: SkySharedPref,
     videoUrl: String,
-    channelList: ArrayList<ChannelInfo>?,
-    currentChannelIndex: Int
+    channelList: ArrayList<ChannelInfo>? = null,
+    currentChannelIndex: Int = -1,
+    cloudChannelList: List<CloudChannel>? = null,
+    currentCloudChannel: CloudChannel? = null
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -199,8 +202,12 @@ fun ExoPlayJetScreen(
     var isZoneShakaControllerVisible by remember { mutableStateOf(false) }
     var suppressNextZoneCenterKeyUp by remember { mutableStateOf(false) }
 
-    val activeUrlRaw = overrideVideoUrl ?: channelList?.getOrNull(currentIndex)?.videoUrl ?: videoUrl
-    val normalizedActiveUrl = remember(activeUrlRaw, currentIndex, channelList, videoUrl) {
+    var activeCloudChannel by remember(currentCloudChannel, currentIndex, cloudChannelList) {
+        mutableStateOf(if (!cloudChannelList.isNullOrEmpty() && currentIndex in cloudChannelList.indices) cloudChannelList[currentIndex] else currentCloudChannel)
+    }
+
+    val activeUrlRaw = overrideVideoUrl ?: activeCloudChannel?.mpdUrl ?: activeCloudChannel?.m3u8Url ?: channelList?.getOrNull(currentIndex)?.videoUrl ?: videoUrl
+    val normalizedActiveUrl = remember(activeUrlRaw, currentIndex, channelList, videoUrl, activeCloudChannel) {
         normalizePlaybackUrl(context, activeUrlRaw)
     }
     val useZoneDrmWebPlayer = remember(activeUrlRaw, normalizedActiveUrl) {
@@ -570,13 +577,14 @@ fun ExoPlayJetScreen(
 
     val exoPlayer = remember {
         initializePlayer(
-            getCurrentVideoUrl = { overrideVideoUrl ?: channelList?.getOrNull(currentIndex)?.videoUrl ?: videoUrl },
+            getCurrentVideoUrl = { overrideVideoUrl ?: activeCloudChannel?.mpdUrl ?: activeCloudChannel?.m3u8Url ?: channelList?.getOrNull(currentIndex)?.videoUrl ?: videoUrl },
             context = context,
-            retryCountRef = retryCountRef
+            retryCountRef = retryCountRef,
+            cloudChannel = activeCloudChannel
         )
     }
 
-    fun startPlaybackAfterViewAttach(playbackUrl: String, seekToPosition: Long = 0L) {
+    fun startPlaybackAfterViewAttach(playbackUrl: String, seekToPosition: Long = 0L, cloudChannel: CloudChannel? = null) {
         val normalizedUrl = normalizePlaybackUrl(context, playbackUrl)
         if (normalizedUrl.isBlank()) return
 
@@ -587,7 +595,7 @@ fun ExoPlayJetScreen(
                 attempts++
             }
 
-            val mediaItem = buildMediaItemForPlaybackUrl(normalizedUrl)
+            val mediaItem = buildMediaItemForPlaybackUrl(normalizedUrl, cloudChannel)
             exoPlayer.setMediaItem(mediaItem)
             exoPlayer.prepare()
             if (seekToPosition > 0L) {
@@ -708,9 +716,15 @@ fun ExoPlayJetScreen(
         }
     }
 
-    LaunchedEffect(currentIndex) {
+    LaunchedEffect(currentIndex, cloudChannelList) {
         overrideVideoUrl = null
         retryCountRef.value = 0
+
+        // Update current cloud channel if zapping
+        if (!cloudChannelList.isNullOrEmpty() && currentIndex in cloudChannelList.indices) {
+            // currentCloudChannel is passed as param, but we need to track the active one during zapping
+            // Actually, we should probably use a local state for currentCloudChannel if we want zapping to work.
+        }
         // Do NOT set isBuffering=true here — let the 800ms debounce in the Player.Listener
         // handle it. Setting it immediately causes the spinner to flash on every channel
         // switch even when the new channel starts playing within milliseconds.
@@ -746,7 +760,7 @@ fun ExoPlayJetScreen(
                 return@LaunchedEffect
             }
 
-            startPlaybackAfterViewAttach(currentUrl)
+            startPlaybackAfterViewAttach(currentUrl, cloudChannel = activeCloudChannel)
         } catch (_: Exception) {
             Toast.makeText(context, "Stream not supported", Toast.LENGTH_SHORT).show()
             try {
@@ -873,7 +887,7 @@ fun ExoPlayJetScreen(
                     retryCountRef.value = 0
                     val finalUrl = normalizePlaybackUrl(context, targetUrl)
                     if (finalUrl.isBlank()) return@setOnSwitchRequest
-                    val mediaItem = buildMediaItemForPlaybackUrl(finalUrl)
+                    val mediaItem = buildMediaItemForPlaybackUrl(finalUrl, activeCloudChannel)
                     // Do NOT stop() — stop() blanks the surface. Set the new item
                     // directly; keepContentOnPlayerReset keeps the last frame
                     // visible until the new channel's first frame arrives.
@@ -1088,6 +1102,7 @@ fun ExoPlayJetScreen(
                     event = event,
                     tvNAV = tvNAV,
                     channelList = channelList,
+                    cloudChannelList = cloudChannelList,
                     currentIndexState = { currentIndex },
                     onChannelChange = { currentIndex = it }
                 )
@@ -1514,17 +1529,19 @@ fun ExoPlayJetScreen(
         }
 
         AnimatedVisibility(
-            visible = !PlayerCommandBus.isInPipMode && (showChannelOverlay && channelList != null),
+            visible = !PlayerCommandBus.isInPipMode && (showChannelOverlay && (channelList != null || currentCloudChannel != null)),
             enter = fadeIn(),
             exit = fadeOut()
         ) {
             ChannelInfoOverlay(
                 channelList = channelList,
                 currentIndex = currentIndex,
-                currentProgramName = currentProgramName
+                currentProgramName = currentProgramName,
+                cloudChannel = activeCloudChannel,
+                serverName = preferenceManager.myPrefs.lastCloudServerName
             )
             CurrentTimeOverlay(
-                visible = !PlayerCommandBus.isInPipMode && (showChannelOverlay && channelList != null)
+                visible = !PlayerCommandBus.isInPipMode && (showChannelOverlay && (channelList != null || currentCloudChannel != null))
             )
         }
 
@@ -1642,13 +1659,13 @@ fun ExoPlayJetScreen(
 
     // Also handle direct video URL changes (e.g., new intent while in PiP with no channel list/index)
     LaunchedEffect(videoUrl) {
-        if (channelList.isNullOrEmpty() || currentIndex < 0) {
-            val rawUrl = channelList?.getOrNull(currentIndex)?.videoUrl ?: videoUrl
+        if ((channelList.isNullOrEmpty() && cloudChannelList.isNullOrEmpty()) || currentIndex < 0) {
+            val rawUrl = activeCloudChannel?.mpdUrl ?: activeCloudChannel?.m3u8Url ?: channelList?.getOrNull(currentIndex)?.videoUrl ?: videoUrl
             val url = normalizePlaybackUrl(context, rawUrl)
             if (url.isBlank()) return@LaunchedEffect
             val isDrmRoute = isLikelyDrmRoute(rawUrl) || isLikelyDrmRoute(url)
             if (isDrmRoute) return@LaunchedEffect
-            startPlaybackAfterViewAttach(url)
+            startPlaybackAfterViewAttach(url, cloudChannel = activeCloudChannel)
         }
     }
 
@@ -1687,9 +1704,15 @@ suspend fun fetchCurrentProgram(basefinURL: String, channelId: String): String? 
 fun ChannelInfoOverlay(
     channelList: List<ChannelInfo>?,
     currentIndex: Int,
-    currentProgramName: String?
+    currentProgramName: String?,
+    cloudChannel: CloudChannel? = null,
+    serverName: String? = null
 ) {
-    channelList?.getOrNull(currentIndex)?.let { channel ->
+    val channelName = cloudChannel?.name ?: channelList?.getOrNull(currentIndex)?.channelName
+    val logoUrl = cloudChannel?.logo ?: channelList?.getOrNull(currentIndex)?.logoUrl
+    val groupName = cloudChannel?.group ?: serverName
+
+    if (channelName != null) {
         Box(modifier = Modifier.fillMaxSize()) {
             Card(
                 modifier = Modifier
@@ -1712,7 +1735,7 @@ fun ChannelInfoOverlay(
                             )
                         ) {
                             AsyncImage(
-                                model = channel.logoUrl,
+                                model = logoUrl,
                                 contentDescription = "Channel Logo",
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier
@@ -1728,17 +1751,19 @@ fun ChannelInfoOverlay(
                         Column {
                             // Channel Number + Name
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (currentIndex >= 0) {
+                                    Text(
+                                        text = String.format("%02d", currentIndex + 1),
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        modifier = Modifier
+                                            .padding(end = 12.dp)
+                                            .widthIn(min = 36.dp)
+                                    )
+                                }
                                 Text(
-                                    text = String.format("%02d", currentIndex + 1),
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    modifier = Modifier
-                                        .padding(end = 12.dp)
-                                        .widthIn(min = 36.dp)
-                                )
-                                Text(
-                                    text = channel.channelName,
+                                    text = channelName,
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 20.sp,
@@ -1746,10 +1771,11 @@ fun ChannelInfoOverlay(
                                 )
                             }
 
-                            currentProgramName?.let { programName ->
+                            val subText = currentProgramName ?: groupName
+                            subText?.let { text ->
                                 Spacer(modifier = Modifier.height(0.dp))
                                 Text(
-                                    text = programName,
+                                    text = text,
                                     color = Color.White.copy(alpha = 0.8f),
                                     fontWeight = FontWeight.Normal,
                                     fontSize = 16.sp,
@@ -1813,10 +1839,19 @@ fun getCurrentFormattedTime(): String {
     return String.format("%02d:%02d %s", if (hour == 0) 12 else hour, minute, amPm)
 }
 
-private fun buildMediaItemForPlaybackUrl(url: String): MediaItem {
+private fun buildMediaItemForPlaybackUrl(url: String, cloudChannel: CloudChannel? = null): MediaItem {
     val builder = MediaItem.Builder().setUri(url.toUri())
     val mimeType = inferPlaybackMimeType(url)
     if (!mimeType.isNullOrBlank()) builder.setMimeType(mimeType)
+
+    cloudChannel?.licenseUrl?.let { licenseUrl ->
+        builder.setDrmConfiguration(
+            MediaItem.DrmConfiguration.Builder(androidx.media3.common.C.WIDEVINE_UUID)
+                .setLicenseUri(licenseUrl)
+                .setMultiSession(true)
+                .build()
+        )
+    }
 
     // For HLS live streams: stay 15 s behind the live edge.
     // ExoPlayer silently pre-fetches the next 15 s of segments in the background,
@@ -1883,7 +1918,8 @@ private fun toZoneDrmUrl(inputUrl: String, localPort: Int, quality: String?): St
 fun initializePlayer(
     getCurrentVideoUrl: () -> String,
     context: Context,
-    retryCountRef: MutableState<Int>
+    retryCountRef: MutableState<Int>,
+    cloudChannel: CloudChannel? = null
 ): ExoPlayer {
     // Short timeouts: if a segment fetch hangs, fail fast (8 s) and retry
     // instead of waiting the OS default ~15 s with a black screen.
@@ -1891,7 +1927,11 @@ fun initializePlayer(
         .setAllowCrossProtocolRedirects(true)
         .setConnectTimeoutMs(8_000)
         .setReadTimeoutMs(8_000)
-//        .setUserAgent(userAgent) //Future Ref
+        .setUserAgent(cloudChannel?.userAgent ?: "CloudPlay")
+
+    cloudChannel?.headers?.let {
+        httpDataSourceFactory.setDefaultRequestProperties(it)
+    }
     val mediaSourceFactory =
             DefaultMediaSourceFactory(context)
                 .setDataSourceFactory(httpDataSourceFactory)
@@ -1947,7 +1987,7 @@ fun initializePlayer(
     fun prepareAndPlay(seekToPosition: Long = 0L) {
         val normalizedUrl = normalizePlaybackUrl(context, getCurrentVideoUrl())
         if (normalizedUrl.isBlank()) return
-        val mediaItem = buildMediaItemForPlaybackUrl(normalizedUrl)
+        val mediaItem = buildMediaItemForPlaybackUrl(normalizedUrl, cloudChannel)
         player.setMediaItem(mediaItem)
         player.prepare()
         if (seekToPosition > 0L) {
@@ -2081,12 +2121,13 @@ fun initializePlayer(
 fun handleTVRemoteKey(
     event: KeyEvent,
     tvNAV: String?,
-    channelList: ArrayList<ChannelInfo>?,
+    channelList: ArrayList<ChannelInfo>? = null,
+    cloudChannelList: List<CloudChannel>? = null,
     currentIndexState: () -> Int,
     onChannelChange: (Int) -> Unit
 ): Boolean {
     if (event.type != KeyEventType.KeyUp) return false
-    val total = channelList?.size ?: 0
+    val total = if (!cloudChannelList.isNullOrEmpty()) cloudChannelList.size else channelList?.size ?: 0
     if (total <= 0) return false
 
     val currentIndex = currentIndexState()
