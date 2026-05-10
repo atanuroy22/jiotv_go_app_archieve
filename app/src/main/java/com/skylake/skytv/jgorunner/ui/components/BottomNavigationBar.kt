@@ -23,29 +23,40 @@ fun BottomNavigationBar(
 ) {
     val items = listOf(
         BottomNavigationItem(
-            title = "Home",
+            title = "CloudHome",
             selectedIcon = Icons.Filled.Home,
             unselectedIcon = Icons.Outlined.Home,
             hasNews = false,
+            label = "Home"
+        ),
+        BottomNavigationItem(
+            title = "JioHome",
+            selectedIcon = Icons.Filled.DeveloperMode,
+            unselectedIcon = Icons.Outlined.DeveloperMode,
+            hasNews = false,
+            label = "Jio"
         ),
         BottomNavigationItem(
             title = "Settings",
             selectedIcon = Icons.Filled.Settings,
             unselectedIcon = Icons.Outlined.Settings,
             hasNews = false,
+            label = "Settings"
         ),
         BottomNavigationItem(
             title = "Debug",
             selectedIcon = Icons.Filled.DeveloperMode,
             unselectedIcon = Icons.Outlined.DeveloperMode,
             hasNews = false,
+            label = "Debug"
         ),
     )
 
     val selectedIndex = when (currentScreen) {
-        "Home" -> 0
-        "Settings", "SettingsTV" -> 1
-        "Debug" -> 2
+        "CloudHome", "CloudMain" -> 0
+        "JioHome" -> 1
+        "Settings", "SettingsTV" -> 2
+        "Debug" -> 3
         else -> 0
     }
 
@@ -56,12 +67,12 @@ fun BottomNavigationBar(
                 onClick = {
                     setCurrentScreen(item.title)
                 },
-                label = { Text(item.title) },
+                label = { Text(item.label) },
                 icon = {
                     BadgedBox(badge = { if (item.hasNews) Badge() }) {
                         Icon(
                             imageVector = if (selectedIndex == index) item.selectedIcon else item.unselectedIcon,
-                            contentDescription = item.title
+                            contentDescription = item.label
                         )
                     }
                 }
@@ -74,5 +85,6 @@ data class BottomNavigationItem(
     val title: String,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector,
-    val hasNews: Boolean
+    val hasNews: Boolean,
+    val label: String
 )
