@@ -154,12 +154,9 @@ class MainActivity : ComponentActivity() {
         if (isTvZoneSelected) {
             preferenceManager.myPrefs.autoStartIPTV = false
         }
-        if (shouldOpenZoneOnStart) {
+        if (shouldOpenZoneOnStart && currentScreen == "Home") {
             currentScreen = "Zone"
         }
-
-        // Ensure we always start on CloudHome
-        currentScreen = "CloudHome"
 
         if (preferenceManager.myPrefs.jtvGoBinaryVersion?.contains(
                 "develop",
@@ -255,12 +252,6 @@ class MainActivity : ComponentActivity() {
             preferenceManager.savePreferences()
             finish()
             return
-        }
-
-        // Keep startup landing consistent for TVZone users.
-        // If startup is still on Home after setup checks, route to Zone.
-        if (shouldOpenZoneOnStart && currentScreen == "Home") {
-            currentScreen = "Zone"
         }
 
         if (isServerRunning) {
@@ -526,7 +517,7 @@ class MainActivity : ComponentActivity() {
                                     com.skylake.skytv.jgorunner.data.CloudDataManager.currentChannelList = list
                                     val channelIndex = list.indexOf(channel)
 
-                                    val intent = Intent(this@MainActivity, CloudPlayerActivity::class.java).apply {
+                                    val intent = Intent(this@MainActivity, com.skylake.skytv.jgorunner.activities.CloudPlayerActivity::class.java).apply {
                                         putExtra("current_cloud_channel_index", channelIndex)
                                     }
                                     startActivity(intent)

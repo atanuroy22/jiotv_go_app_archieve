@@ -84,12 +84,14 @@ fun CloudMainScreen(
     val serverListFocusRequester = remember { FocusRequester() }
     val settingsFocusRequester = remember { FocusRequester() }
     val channelsFocusRequester = remember { FocusRequester() }
+    val searchFocusRequester = remember { FocusRequester() }
 
     val filteredChannels = remember(channels, searchQuery, selectedCategories, selectedLanguages) {
         channels.filter { channel ->
             val matchesSearch = searchQuery.isEmpty() ||
                 channel.name.contains(searchQuery, ignoreCase = true) ||
-                channel.group?.contains(searchQuery, ignoreCase = true) == true
+                channel.group?.contains(searchQuery, ignoreCase = true) == true ||
+                channel.language?.contains(searchQuery, ignoreCase = true) == true
 
             val matchesCategory = selectedCategories.isEmpty() || selectedCategories.contains(channel.group)
             val matchesLanguage = selectedLanguages.isEmpty() || selectedLanguages.contains(channel.language)
@@ -102,6 +104,12 @@ fun CloudMainScreen(
         servers = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
         if (currentServer == null) {
             currentServer = servers.firstOrNull()
+        }
+    }
+
+    LaunchedEffect(isSearchVisible) {
+        if (isSearchVisible) {
+            searchFocusRequester.requestFocus()
         }
     }
 
@@ -395,7 +403,9 @@ fun CloudMainScreen(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
                     label = { Text("Search Channels") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(searchFocusRequester),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White,
