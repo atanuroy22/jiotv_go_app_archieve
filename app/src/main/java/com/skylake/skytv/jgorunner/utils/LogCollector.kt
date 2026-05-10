@@ -3,18 +3,32 @@ package com.skylake.skytv.jgorunner.utils
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import java.util.concurrent.CopyOnWriteArrayList
 
 object LogCollector {
     private val logs = CopyOnWriteArrayList<String>()
-    private const val MAX_LOGS = 100
+    private const val MAX_LOGS = 250
 
     fun log(message: String) {
-        logs.add(0, "${System.currentTimeMillis()}: $message")
+        val timestamp = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date())
+        logs.add(0, "[$timestamp] $message")
         if (logs.size > MAX_LOGS) {
             logs.removeAt(logs.size - 1)
         }
+    }
+
+    fun logError(message: String, throwable: Throwable?) {
+        log("ERROR: $message")
+        throwable?.let {
+            log("CAUSE: ${it.message}")
+            log("STACKTRACE: ${Log.getStackTraceString(it)}")
+        }
+    }
+
+    fun clear() {
+        logs.clear()
     }
 
     fun getLogs(): String {

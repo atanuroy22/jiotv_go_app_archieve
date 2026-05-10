@@ -530,11 +530,23 @@ fun CloudMainScreen(
 
 @Composable
 fun LogViewerDialog(onDismiss: () -> Unit, onCopy: () -> Unit) {
+    var logs by remember { mutableStateOf(LogCollector.getLogs()) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Debug Logs") },
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Debug Logs")
+                IconButton(onClick = { LogCollector.clear(); logs = "" }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Clear Logs", tint = Color.Red)
+                }
+            }
+        },
         text = {
-            val logs = remember { LogCollector.getLogs() }
             Column {
                 Text(
                     text = if (logs.isEmpty()) "No logs found." else logs,
