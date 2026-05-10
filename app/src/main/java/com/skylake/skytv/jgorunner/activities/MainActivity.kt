@@ -809,7 +809,7 @@ class MainActivity : ComponentActivity() {
                     currentScreen = "Debug"
                 }
 
-                "CloudHome" -> {
+                "CloudHome", "Home" -> {
                     currentScreen = "JioHome"
                 }
 

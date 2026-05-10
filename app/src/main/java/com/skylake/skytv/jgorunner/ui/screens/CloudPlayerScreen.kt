@@ -57,6 +57,8 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
+import androidx.media3.exoplayer.drm.FrameworkMediaDrm
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
@@ -67,6 +69,7 @@ import com.skylake.skytv.jgorunner.utils.LogCollector
 import com.skylake.skytv.jgorunner.utils.normalizePlaybackUrl
 import com.skylake.skytv.jgorunner.utils.setupCustomPlaybackLogic
 import com.skylake.skytv.jgorunner.utils.cleanupPlaybackLogic
+import com.skylake.skytv.jgorunner.utils.CloudMediaDrmCallback
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -107,22 +110,31 @@ fun CloudPlayerScreen(
 
     val dynamicHeaders = remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
-    val exoPlayer = remember {
-        val okHttpClient = OkHttpClient.Builder()
+    val okHttpClient = remember {
+        OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
+    }
 
-        val dataSourceFactory = androidx.media3.datasource.DataSource.Factory {
+    val dataSourceFactory = remember {
+        androidx.media3.datasource.DataSource.Factory {
             val factory = OkHttpDataSource.Factory(okHttpClient)
             factory.setDefaultRequestProperties(dynamicHeaders.value)
             factory.createDataSource()
         }
+    }
 
+    val mediaSourceFactory = remember {
+        DefaultMediaSourceFactory(context)
+            .setDataSourceFactory(dataSourceFactory)
+    }
+
+    val exoPlayer = remember {
         ExoPlayer.Builder(context)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory))
+            .setMediaSourceFactory(mediaSourceFactory)
             .build().apply {
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
@@ -155,17 +167,26 @@ fun CloudPlayerScreen(
 
         val headers = ch?.headers ?: emptyMap()
         val rawUA = ch?.userAgent
-        val isJio = ch?.mpdUrl?.contains("jio.com") == true || ch?.m3u8Url?.contains("jio.com") == true ||
-                   ch?.licenseUrl?.contains("webplay.fun") == true
+        val isJio = ch?.mpdUrl?.contains("jio.com", true) == true ||
+                   ch?.m3u8Url?.contains("jio.com", true) == true ||
+                   ch?.licenseUrl?.contains("webplay.fun", true) == true ||
+                   ch?.licenseUrl?.contains("jio", true) == true
 
         val finalUA = if (rawUA == null || rawUA == "@cloudplay" || rawUA.isEmpty()) {
-            if (isJio) "JioTV/7.0.8 (Linux; Android 13; Build/TP1A.220624.014)" else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            if (isJio) "JioTV/Android" else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         } else {
             rawUA
         }
 
         val normalizedHeaders = mutableMapOf<String, String>()
         normalizedHeaders["User-Agent"] = finalUA
+
+        if (isJio) {
+            normalizedHeaders["os"] = "Android"
+            normalizedHeaders["devicetype"] = "phone"
+            normalizedHeaders["uniqueId"] = java.util.UUID.randomUUID().toString()
+            normalizedHeaders["versionCode"] = "323"
+        }
 
         headers.forEach { (k, v) ->
             val key = when {
@@ -216,10 +237,22 @@ fun CloudPlayerScreen(
                 LogCollector.log("DRM Headers: ${drmHeaders.keys.joinToString(", ")}")
                 LogCollector.log("DRM UA: ${drmHeaders["User-Agent"]}")
 
+                val drmCallback = CloudMediaDrmCallback(lic, drmHeaders, okHttpClient)
+                val drmSessionManager = DefaultDrmSessionManager.Builder()
+                    .setMultiSession(true)
+                    .setUuidAndExoMediaDrmProvider(C.WIDEVINE_UUID, FrameworkMediaDrm.DEFAULT_PROVIDER)
+                    .build(drmCallback)
+
+                try {
+                    // mediaSourceFactory is now accessible because we stored it in the outer scope
+                    mediaSourceFactory.setDrmSessionManagerProvider { drmSessionManager }
+                } catch (e: Exception) {
+                    Log.e("CloudPlayer", "Failed to set DRM manager", e)
+                }
+
                 builder.setDrmConfiguration(
                     MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
                         .setLicenseUri(lic)
-                        .setLicenseRequestHeaders(drmHeaders)
                         .setMultiSession(true)
                         .setForceDefaultLicenseUri(true)
                         .build()
