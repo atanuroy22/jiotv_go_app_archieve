@@ -58,7 +58,7 @@ fun CloudMainScreen(
     val repository = remember { CloudRepository(context) }
     val scope = rememberCoroutineScope()
 
-    var currentServer by remember { mutableStateOf(initialServer) }
+    var currentServer by remember { mutableStateOf<CloudServer?>(null) }
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var channels by remember { mutableStateOf<List<CloudChannel>>(emptyList()) }
     var isLoadingChannels by remember { mutableStateOf(false) }
@@ -96,6 +96,9 @@ fun CloudMainScreen(
 
     LaunchedEffect(Unit) {
         servers = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
+        if (currentServer == null) {
+            currentServer = initialServer ?: servers.firstOrNull()
+        }
     }
 
     LaunchedEffect(currentServer) {
@@ -116,12 +119,14 @@ fun CloudMainScreen(
             }
 
             // Autoplay logic if enabled
-            if (preferenceManager.myPrefs.cloudAutoplayFirstChannel && channels.isNotEmpty()) {
-                onPlayChannel(channels.first(), channels)
-            } else if (preferenceManager.myPrefs.cloudAutoplayLastChannel) {
-                val lastId = preferenceManager.myPrefs.lastCloudPlayedChannelId
-                val lastChannel = channels.find { it.id == lastId } ?: channels.firstOrNull()
-                lastChannel?.let { onPlayChannel(it, channels) }
+            if (channels.isNotEmpty()) {
+                if (preferenceManager.myPrefs.cloudAutoplayFirstChannel) {
+                    onPlayChannel(channels.first(), channels)
+                } else if (preferenceManager.myPrefs.cloudAutoplayLastChannel) {
+                    val lastId = preferenceManager.myPrefs.lastCloudPlayedChannelId
+                    val lastChannel = channels.find { it.id == lastId }
+                    lastChannel?.let { onPlayChannel(it, channels) }
+                }
             }
         }
     }

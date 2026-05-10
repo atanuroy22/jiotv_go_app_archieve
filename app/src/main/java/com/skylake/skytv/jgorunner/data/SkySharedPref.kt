@@ -228,7 +228,7 @@ class SkySharedPref(context: Context) {
         @SharedPrefKey("cloud_animation_enabled") var cloudAnimationEnabled: Boolean = true,
         @SharedPrefKey("cloud_focus_animation_enabled") var cloudFocusAnimationEnabled: Boolean = true,
         @SharedPrefKey("cloud_autoplay_first_channel") var cloudAutoplayFirstChannel: Boolean = false,
-        @SharedPrefKey("cloud_autoplay_last_channel") var cloudAutoplayLastChannel: Boolean = true,
+        @SharedPrefKey("cloud_autoplay_last_channel") var cloudAutoplayLastChannel: Boolean = false,
         @SharedPrefKey("last_cloud_played_channel_id") var lastCloudPlayedChannelId: String? = null,
         @SharedPrefKey("last_cloud_server_name") var lastCloudServerName: String? = null,
 

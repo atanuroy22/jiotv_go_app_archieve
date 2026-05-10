@@ -53,6 +53,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesomeMotion
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularWavyProgressIndicator
@@ -578,7 +579,7 @@ fun ExoPlayJetScreen(
         return dispatchAndroidKeyToZoneWeb(action, keyCode)
     }
 
-    val exoPlayer = remember {
+    val exoPlayer = remember(activeCloudChannel) {
         initializePlayer(
             getCurrentVideoUrl = { overrideVideoUrl ?: activeCloudChannel?.mpdUrl ?: activeCloudChannel?.m3u8Url ?: channelList?.getOrNull(currentIndex)?.videoUrl ?: videoUrl },
             context = context,
@@ -965,6 +966,9 @@ fun ExoPlayJetScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .clickable {
+                showChannelOverlay = !showChannelOverlay
+            }
             .focusRequester(focusRequester)
             .focusable()
             .onPreviewKeyEvent { event ->
@@ -1546,7 +1550,10 @@ fun ExoPlayJetScreen(
                 currentIndex = currentIndex,
                 currentProgramName = currentProgramName,
                 cloudChannel = activeCloudChannel,
-                serverName = preferenceManager.myPrefs.lastCloudServerName
+                serverName = preferenceManager.myPrefs.lastCloudServerName,
+                onMenuClick = {
+                    showChannelPanel = (channelList != null || cloudChannelList != null)
+                }
             )
             CurrentTimeOverlay(
                 visible = !PlayerCommandBus.isInPipMode && (showChannelOverlay && (channelList != null || currentCloudChannel != null))
@@ -1759,7 +1766,8 @@ fun ChannelInfoOverlay(
     currentIndex: Int,
     currentProgramName: String?,
     cloudChannel: CloudChannel? = null,
-    serverName: String? = null
+    serverName: String? = null,
+    onMenuClick: () -> Unit = {}
 ) {
     val channelName = cloudChannel?.name ?: channelList?.getOrNull(currentIndex)?.channelName
     val logoUrl = cloudChannel?.logo ?: channelList?.getOrNull(currentIndex)?.logoUrl
@@ -1837,6 +1845,15 @@ fun ChannelInfoOverlay(
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.width(20.dp))
+
+                        IconButton(
+                            onClick = onMenuClick,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+                        }
                     }
                 }
             }
@@ -1894,7 +1911,7 @@ fun getCurrentFormattedTime(): String {
 
 private fun buildMediaItemForPlaybackUrl(url: String, cloudChannel: CloudChannel? = null): MediaItem {
     val builder = MediaItem.Builder().setUri(url.toUri())
-    val mimeType = inferPlaybackMimeType(url)
+    val mimeType = if (cloudChannel?.type == "dash") MimeTypes.APPLICATION_MPD else inferPlaybackMimeType(url)
     if (!mimeType.isNullOrBlank()) builder.setMimeType(mimeType)
 
     cloudChannel?.licenseUrl?.let { licenseUrl ->
