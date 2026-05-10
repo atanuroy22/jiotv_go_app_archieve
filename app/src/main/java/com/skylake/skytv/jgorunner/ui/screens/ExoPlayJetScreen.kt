@@ -53,6 +53,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesomeMotion
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Card
@@ -871,10 +872,12 @@ fun ExoPlayJetScreen(
         if (overlayVisibilityTick > 0L || showChannelPanel) {
             showChannelOverlay = true
             if (!showChannelPanel) {
-                delay(4000)
+                delay(6000) // Increase visibility to 6 seconds
                 showChannelOverlay = false
                 overlayVisibilityTick = 0
             }
+        } else {
+            showChannelOverlay = false
         }
     }
 
@@ -987,7 +990,10 @@ fun ExoPlayJetScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .clickable {
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null
+            ) {
                 overlayVisibilityTick = System.currentTimeMillis()
             }
             .focusRequester(focusRequester)
@@ -1083,8 +1089,11 @@ fun ExoPlayJetScreen(
                     }
                 }
 
-                if (event.type == KeyEventType.KeyUp && isOkKey) {
+                if (isOkKey) {
                     overlayVisibilityTick = System.currentTimeMillis()
+                }
+
+                if (event.type == KeyEventType.KeyUp && isOkKey) {
                     if (showChannelPanel) {
                         if (!channelList.isNullOrEmpty()) {
                             currentIndex = panelSelectedIndex.coerceIn(0, channelList.size - 1)
@@ -1891,6 +1900,18 @@ fun ChannelInfoOverlay(
                         ) {
                             Icon(Icons.Default.Home, contentDescription = "Home", tint = Color.White)
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        IconButton(
+                            onClick = {
+                                // User wants the "Channels Controller" (CloudMainScreen)
+                                (context as? Activity)?.finish()
+                            },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Default.Dashboard, contentDescription = "Controller", tint = Color.White)
+                        }
                     }
                 }
             }
@@ -1952,10 +1973,12 @@ private fun buildMediaItemForPlaybackUrl(url: String, cloudChannel: CloudChannel
     if (!mimeType.isNullOrBlank()) builder.setMimeType(mimeType)
 
     cloudChannel?.licenseUrl?.let { licenseUrl ->
+        LogCollector.log("Setting DRM License URL: $licenseUrl")
         builder.setDrmConfiguration(
             MediaItem.DrmConfiguration.Builder(androidx.media3.common.C.WIDEVINE_UUID)
                 .setLicenseUri(licenseUrl)
                 .setMultiSession(true)
+                .setForceDefaultLicenseUri(true)
                 .build()
         )
     }
@@ -2105,6 +2128,23 @@ fun initializePlayer(
 
     // Always Retry
     player.addListener(object : Player.Listener {
+        override fun onEvents(player: Player, events: Player.Events) {
+            if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
+                val stateStr = when(player.playbackState) {
+                    Player.STATE_IDLE -> "IDLE"
+                    Player.STATE_BUFFERING -> "BUFFERING"
+                    Player.STATE_READY -> "READY"
+                    Player.STATE_ENDED -> "ENDED"
+                    else -> "UNKNOWN"
+                }
+                LogCollector.log("Player State Changed: $stateStr")
+            }
+            if (events.contains(Player.EVENT_PLAYER_ERROR)) {
+                val error = player.playerError
+                LogCollector.log("Player Event ERROR: ${error?.errorCodeName} - ${error?.message}")
+            }
+        }
+
         private var isBufferingLong = false
         private val bufferingStallRunnable = Runnable {
             if (!player.playWhenReady || player.playbackState != Player.STATE_BUFFERING) return@Runnable

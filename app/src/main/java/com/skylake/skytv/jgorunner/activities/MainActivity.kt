@@ -476,7 +476,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             JGOTheme(themeOverride = isSwitchDarkMode) {
-                val hideNavBar = currentScreen == "CloudHome" || currentScreen == "CloudMain" || currentScreen == "Zone"
+                val hideNavBar = currentScreen == "Zone"
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
@@ -491,7 +491,7 @@ class MainActivity : ComponentActivity() {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(if (hideNavBar) PaddingValues(0.dp) else innerPadding)
+                            .padding(innerPadding)
                     ) {
                         when (currentScreen) {
                             "CloudHome" -> CloudHomeScreen(
