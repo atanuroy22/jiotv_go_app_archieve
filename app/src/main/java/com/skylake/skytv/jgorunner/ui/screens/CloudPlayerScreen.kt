@@ -105,6 +105,8 @@ fun CloudPlayerScreen(
     val headerState = remember { mutableStateOf<Map<String, String>?>(null) }
     val userAgentState = remember { mutableStateOf<String?>(null) }
 
+    val dynamicHeaders = remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+
     val exoPlayer = remember {
         val okHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -113,10 +115,11 @@ fun CloudPlayerScreen(
             .followSslRedirects(true)
             .build()
 
-        // Create a standard OkHttpDataSource.Factory
-        // We will update its default request properties dynamically if needed,
-        // but Media3 works best when the factory is a proper HttpDataSource.Factory
-        val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
+        val dataSourceFactory = androidx.media3.datasource.DataSource.Factory {
+            val factory = OkHttpDataSource.Factory(okHttpClient)
+            factory.setDefaultRequestProperties(dynamicHeaders.value)
+            factory.createDataSource()
+        }
 
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(dataSourceFactory))
@@ -153,12 +156,11 @@ fun CloudPlayerScreen(
         val headers = ch?.headers ?: emptyMap()
         val rawUA = ch?.userAgent
         val finalUA = if (rawUA == null || rawUA == "@cloudplay" || rawUA.isEmpty()) {
-            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         } else {
             rawUA
         }
 
-        // Update the global DataSourceFactory properties for this channel
         val normalizedHeaders = mutableMapOf<String, String>()
         normalizedHeaders["User-Agent"] = finalUA
         headers.forEach { (k, v) ->
@@ -179,13 +181,7 @@ fun CloudPlayerScreen(
             normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
         }
 
-        // Access the factory to set default properties
-        try {
-            val factory = (exoPlayer.mediaSourceFactory as DefaultMediaSourceFactory).dataSourceFactory as OkHttpDataSource.Factory
-            factory.setDefaultRequestProperties(normalizedHeaders)
-        } catch (e: Exception) {
-            Log.e("CloudPlayer", "Failed to update factory headers", e)
-        }
+        dynamicHeaders.value = normalizedHeaders
 
         playerError = null
         retryCountRef.value = 0
@@ -207,7 +203,7 @@ fun CloudPlayerScreen(
                 LogCollector.log("Setting Cloud DRM: $lic")
 
                 val drmHeaders = mutableMapOf<String, String>()
-                drmHeaders.putAll(normalizedHeaders)
+                drmHeaders.putAll(dynamicHeaders.value)
 
                 // Logging header keys for diagnostics
                 LogCollector.log("DRM Headers: ${drmHeaders.keys.joinToString(", ")}")
