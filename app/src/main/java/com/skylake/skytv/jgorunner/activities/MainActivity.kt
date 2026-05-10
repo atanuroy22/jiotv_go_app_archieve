@@ -27,8 +27,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -474,10 +476,11 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             JGOTheme(themeOverride = isSwitchDarkMode) {
+                val hideNavBar = currentScreen == "CloudHome" || currentScreen == "CloudMain" || currentScreen == "Zone"
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
-                        if (currentScreen != "Zone") {
+                        if (!hideNavBar) {
                             BottomNavigationBar(
                                 currentScreen = currentScreen,
                                 setCurrentScreen = { currentScreen = it }
@@ -488,7 +491,7 @@ class MainActivity : ComponentActivity() {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(innerPadding)
+                            .padding(if (hideNavBar) PaddingValues(0.dp) else innerPadding)
                     ) {
                         when (currentScreen) {
                             "CloudHome" -> CloudHomeScreen(

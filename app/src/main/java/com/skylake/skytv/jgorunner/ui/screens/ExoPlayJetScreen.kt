@@ -53,6 +53,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesomeMotion
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -69,6 +70,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -122,6 +124,7 @@ import com.skylake.skytv.jgorunner.R
 import com.skylake.skytv.jgorunner.activities.ChannelInfo
 import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
+import com.skylake.skytv.jgorunner.utils.LogCollector
 import com.skylake.skytv.jgorunner.receivers.PipActionReceiver
 import com.skylake.skytv.jgorunner.services.player.PlayerCommandBus
 import com.skylake.skytv.jgorunner.ui.tvhome.ChannelUtils
@@ -187,6 +190,7 @@ fun ExoPlayJetScreen(
     var panelSelectedIndex by remember { mutableStateOf(currentChannelIndex.coerceAtLeast(0)) }
     var currentProgramName by remember { mutableStateOf<String?>(null) }
     var showChannelOverlay by remember { mutableStateOf(false) }
+    var overlayVisibilityTick by remember { mutableLongStateOf(0L) }
     val retryCountRef = remember { mutableStateOf(0) }
     var exoPlayerView: PlayerView? by remember { mutableStateOf(null) }
     var numericBuffer by remember { mutableStateOf("") }
@@ -588,6 +592,12 @@ fun ExoPlayJetScreen(
         )
     }
 
+    DisposableEffect(exoPlayer) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
     fun startPlaybackAfterViewAttach(playbackUrl: String, seekToPosition: Long = 0L, cloudChannel: CloudChannel? = null) {
         val normalizedUrl = normalizePlaybackUrl(context, playbackUrl)
         if (normalizedUrl.isBlank()) return
@@ -599,6 +609,9 @@ fun ExoPlayJetScreen(
                 attempts++
             }
 
+    LogCollector.log("Starting playback for URL: $normalizedUrl")
+    LogCollector.log("UserAgent: ${cloudChannel?.userAgent}")
+    LogCollector.log("Headers: ${cloudChannel?.headers}")
             val mediaItem = buildMediaItemForPlaybackUrl(normalizedUrl, cloudChannel)
             exoPlayer.setMediaItem(mediaItem)
             exoPlayer.prepare()
@@ -669,7 +682,6 @@ fun ExoPlayJetScreen(
             } catch (_: Exception) {
             }
             cleanupPlaybackLogic(exoPlayer)  // remove listener ref before release → no leak
-            exoPlayer.release()
         }
     }
 
@@ -778,8 +790,6 @@ fun ExoPlayJetScreen(
 
         if (!PlayerCommandBus.isInPipMode) {
             showChannelOverlay = true
-            delay(overlayDisplayTimeMs.toLong())
-            showChannelOverlay = false
         }
     }
 
@@ -854,6 +864,17 @@ fun ExoPlayJetScreen(
         onDispose {
             PlayerCommandBus.setOnStopPlayback(null)
             PlayerCommandBus.clearHandlers()
+        }
+    }
+
+    LaunchedEffect(overlayVisibilityTick, showChannelPanel) {
+        if (overlayVisibilityTick > 0L || showChannelPanel) {
+            showChannelOverlay = true
+            if (!showChannelPanel) {
+                delay(4000)
+                showChannelOverlay = false
+                overlayVisibilityTick = 0
+            }
         }
     }
 
@@ -967,7 +988,7 @@ fun ExoPlayJetScreen(
             .fillMaxSize()
             .background(Color.Black)
             .clickable {
-                showChannelOverlay = !showChannelOverlay
+                overlayVisibilityTick = System.currentTimeMillis()
             }
             .focusRequester(focusRequester)
             .focusable()
@@ -1063,13 +1084,19 @@ fun ExoPlayJetScreen(
                 }
 
                 if (event.type == KeyEventType.KeyUp && isOkKey) {
+                    overlayVisibilityTick = System.currentTimeMillis()
                     if (showChannelPanel) {
                         if (!channelList.isNullOrEmpty()) {
                             currentIndex = panelSelectedIndex.coerceIn(0, channelList.size - 1)
                             showChannelPanel = false
+                        } else if (!cloudChannelList.isNullOrEmpty()) {
+                            currentIndex = panelSelectedIndex.coerceIn(0, cloudChannelList.size - 1)
+                            showChannelPanel = false
                         }
                         return@onPreviewKeyEvent true
                     }
+
+                    showChannelOverlay = true
 
                     if (useZoneDrmWebPlayer) {
                         return@onPreviewKeyEvent false
@@ -1769,6 +1796,7 @@ fun ChannelInfoOverlay(
     serverName: String? = null,
     onMenuClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val channelName = cloudChannel?.name ?: channelList?.getOrNull(currentIndex)?.channelName
     val logoUrl = cloudChannel?.logo ?: channelList?.getOrNull(currentIndex)?.logoUrl
     val groupName = cloudChannel?.group ?: serverName
@@ -1853,6 +1881,15 @@ fun ChannelInfoOverlay(
                             modifier = Modifier.size(48.dp)
                         ) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        IconButton(
+                            onClick = { (context as? Activity)?.finish() },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Default.Home, contentDescription = "Home", tint = Color.White)
                         }
                     }
                 }
@@ -2112,6 +2149,7 @@ fun initializePlayer(
         override fun onPlayerError(error: PlaybackException) {
             val attempt = retryCountRef.value + 1
             retryCountRef.value = attempt
+            LogCollector.log("Player error: ${error.errorCodeName} - ${error.message}")
             if (attempt % 10 == 0) {
                 Log.w(TAG, "Playback still failing after $attempt attempts: ${error.errorCodeName}")
             }

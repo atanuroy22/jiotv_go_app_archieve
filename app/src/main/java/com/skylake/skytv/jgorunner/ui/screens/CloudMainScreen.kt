@@ -45,6 +45,7 @@ import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.ui.components.MultiSelectFilterDialog
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
+import com.skylake.skytv.jgorunner.utils.LogCollector
 import kotlinx.coroutines.launch
 
 @Composable
@@ -58,7 +59,7 @@ fun CloudMainScreen(
     val repository = remember { CloudRepository(context) }
     val scope = rememberCoroutineScope()
 
-    var currentServer by remember { mutableStateOf<CloudServer?>(null) }
+    var currentServer by remember { mutableStateOf(initialServer) }
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var channels by remember { mutableStateOf<List<CloudChannel>>(emptyList()) }
     var isLoadingChannels by remember { mutableStateOf(false) }
@@ -97,7 +98,7 @@ fun CloudMainScreen(
     LaunchedEffect(Unit) {
         servers = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
         if (currentServer == null) {
-            currentServer = initialServer ?: servers.firstOrNull()
+            currentServer = servers.firstOrNull()
         }
     }
 
@@ -315,6 +316,15 @@ fun CloudMainScreen(
                                     }
                                 }
                             }
+                        }
+                    )
+                }
+                item {
+                    SettingsActionItem(
+                        label = "Copy Debug Logs",
+                        icon = Icons.Default.ContentCopy,
+                        onClick = {
+                            LogCollector.copyToClipboard(context)
                         }
                     )
                 }
