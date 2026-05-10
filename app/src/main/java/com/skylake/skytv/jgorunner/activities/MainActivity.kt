@@ -480,7 +480,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
-                        if (currentScreen != "Zone" && currentScreen != "CloudHome" && currentScreen != "CloudMain") {
+                        if (currentScreen != "Zone") {
                             BottomNavigationBar(
                                 currentScreen = currentScreen,
                                 setCurrentScreen = { currentScreen = it }

@@ -49,12 +49,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
@@ -84,7 +85,7 @@ fun CloudPlayerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var currentIndex by remember { mutableIntStateOf(initialIndex) }
+    var currentIndex by remember(initialIndex) { mutableIntStateOf(initialIndex) }
     var activeCloudChannel by remember(currentIndex) {
         mutableStateOf(cloudChannelList.getOrNull(currentIndex))
     }
@@ -105,20 +106,20 @@ fun CloudPlayerScreen(
     val userAgentState = remember { mutableStateOf<String?>(null) }
 
     val exoPlayer = remember {
-        val okHttpClient = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .build()
-
         val dataSourceFactory = object : androidx.media3.datasource.DataSource.Factory {
             override fun createDataSource(): androidx.media3.datasource.DataSource {
-                val factory = OkHttpDataSource.Factory(okHttpClient)
+                val factory = DefaultHttpDataSource.Factory()
                     .setUserAgent(userAgentState.value ?: "@cloudplay")
+                    .setAllowCrossProtocolRedirects(true)
 
                 // Propagate headers with normalized keys
                 headerState.value?.let { h ->
                     val normalized = h.mapKeys { (k, _) ->
-                        if (k.equals("cookie", true)) "Cookie" else k
+                        when {
+                            k.equals("cookie", true) -> "Cookie"
+                            k.equals("user-agent", true) -> "User-Agent"
+                            else -> k
+                        }
                     }
                     factory.setDefaultRequestProperties(normalized)
                 }
@@ -178,12 +179,19 @@ fun CloudPlayerScreen(
 
             ch?.licenseUrl?.let { lic ->
                 LogCollector.log("Setting Cloud DRM: $lic")
-                val drmHeaders = ch.headers?.mapKeys { (k, _) ->
-                    if (k.equals("cookie", true)) "Cookie" else k
-                } ?: emptyMap()
+
+                val drmHeaders = mutableMapOf<String, String>()
+                ch.userAgent?.let { drmHeaders["User-Agent"] = it }
+                ch.headers?.forEach { (k, v) ->
+                    when {
+                        k.equals("cookie", true) -> drmHeaders["Cookie"] = v
+                        k.equals("user-agent", true) -> drmHeaders["User-Agent"] = v
+                        else -> drmHeaders[k] = v
+                    }
+                }
 
                 builder.setDrmConfiguration(
-                    MediaItem.DrmConfiguration.Builder(androidx.media3.common.C.WIDEVINE_UUID)
+                    MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
                         .setLicenseUri(lic)
                         .setLicenseRequestHeaders(drmHeaders)
                         .setMultiSession(true)
