@@ -221,7 +221,10 @@ fun ExoPlayJetScreen(
     val normalizedActiveUrl = remember(activeUrlRaw, currentIndex, channelList, videoUrl, activeCloudChannel) {
         normalizePlaybackUrl(context, activeUrlRaw)
     }
-    val useZoneDrmWebPlayer = remember(activeUrlRaw, normalizedActiveUrl) {
+    val useZoneDrmWebPlayer = remember(activeUrlRaw, normalizedActiveUrl, activeCloudChannel) {
+        // Cloud UI channels should prefer ExoPlayer for premium experience
+        if (activeCloudChannel != null) return@remember false
+
         // Detect DRM from raw URL first; normalization can transform /play/ into /live/*.m3u8.
         isLikelyDrmRoute(activeUrlRaw) || isLikelyDrmRoute(normalizedActiveUrl)
     }
@@ -590,14 +593,23 @@ fun ExoPlayJetScreen(
         return dispatchAndroidKeyToZoneWeb(action, keyCode)
     }
 
-    val exoPlayer = remember(activeCloudChannel) {
+    val headerState = remember { mutableStateOf<Map<String, String>?>(null) }
+    val userAgentState = remember { mutableStateOf<String?>(null) }
+
+    val exoPlayer = remember {
         initializePlayer(
             getCurrentVideoUrl = { overrideVideoUrl ?: activeCloudChannel?.mpdUrl ?: activeCloudChannel?.m3u8Url ?: channelList?.getOrNull(currentIndex)?.videoUrl ?: videoUrl },
             context = context,
             retryCountRef = retryCountRef,
-            cloudChannel = activeCloudChannel,
+            getDynamicHeaders = { headerState.value },
+            getDynamicUserAgent = { userAgentState.value },
             onError = { playerError = it }
         )
+    }
+
+    LaunchedEffect(activeCloudChannel) {
+        headerState.value = activeCloudChannel?.headers
+        userAgentState.value = activeCloudChannel?.userAgent
     }
 
     DisposableEffect(exoPlayer) {
@@ -1177,6 +1189,7 @@ fun ExoPlayJetScreen(
             AndroidView(
                 factory = {
                     WebView(it).apply {
+                        LogCollector.log("Creating WebView Player")
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.mediaPlaybackRequiresUserGesture = false
@@ -1478,65 +1491,67 @@ fun ExoPlayJetScreen(
                         lastLoadedZoneDrmUrl = zoneDrmStartupUrl
                     }
                 },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .align(Alignment.Center)
+                modifier = Modifier.fillMaxSize()
             )
-        } else Box(modifier = Modifier.fillMaxSize()) {
+        } else {
             AndroidView(
                 factory = {
                     PlayerView(it).apply {
-                    setEnableComposeSurfaceSyncWorkaround(true)
-                    useController = false
-                    setShowNextButton(false)
-                    setShowPreviousButton(false)
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                    // Keep the last rendered frame frozen on screen during buffering,
-                    // retries, and player resets — this is the primary fix for black screens.
-                    setKeepContentOnPlayerReset(true)
-                    setResizeMode(resizeModes[resizeModeIndex].first)
-                    player = exoPlayer
+                        LogCollector.log("Creating ExoPlayer PlayerView")
+                        setEnableComposeSurfaceSyncWorkaround(true)
+                        useController = false
+                        setShowNextButton(false)
+                        setShowPreviousButton(false)
+                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                        setKeepContentOnPlayerReset(true)
+                        setResizeMode(resizeModes[resizeModeIndex].first)
+                        player = exoPlayer
                         exoPlayerView = this
                     }
                 },
+                update = { playerView ->
+                    playerView.player = exoPlayer
+                },
                 modifier = Modifier.fillMaxSize()
             )
+        }
 
-            // Transparent touch interceptor
+        // Unified Transparent touch interceptor for both WebView and ExoPlayer
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null
+                ) {
+                    LogCollector.log("Player Screen Tapped")
+                    overlayVisibilityTick = System.currentTimeMillis()
+                }
+        )
+
+        // Error Overlay
+        if (playerError != null && !useZoneDrmWebPlayer) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clickable(
-                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        LogCollector.log("Player Screen Tapped")
+                    .background(Color.Black.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Playback Error", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(playerError!!, color = Color.Red, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = {
+                        playerError = null
                         overlayVisibilityTick = System.currentTimeMillis()
-                    }
-            )
-
-            // Error Overlay
-            if (playerError != null) {
-                Box(
-                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Playback Error", color = Color.White, fontWeight = FontWeight.Bold)
-                        Text(playerError!!, color = Color.Red, fontSize = 12.sp)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = {
-                            playerError = null
-                            overlayVisibilityTick = System.currentTimeMillis()
-                            val current = currentIndex
-                            currentIndex = -1
-                            scope.launch {
-                                delay(100)
-                                currentIndex = current
-                            }
-                        }) {
-                            Text("Retry")
+                        val current = currentIndex
+                        currentIndex = -1
+                        scope.launch {
+                            delay(100)
+                            currentIndex = current
                         }
+                    }) {
+                        Text("Retry")
                     }
                 }
             }
@@ -2039,7 +2054,13 @@ fun getCurrentFormattedTime(): String {
 
 private fun buildMediaItemForPlaybackUrl(url: String, cloudChannel: CloudChannel? = null): MediaItem {
     val builder = MediaItem.Builder().setUri(url.toUri())
-    val mimeType = if (cloudChannel?.type == "dash") MimeTypes.APPLICATION_MPD else inferPlaybackMimeType(url)
+    val cleaned = url.substringBefore('#').substringBefore('?').lowercase()
+    val mimeType = when {
+        cleaned.endsWith(".m3u8") || cleaned.contains(".m3u8") -> MimeTypes.APPLICATION_M3U8
+        cleaned.endsWith(".mpd") || cleaned.contains(".mpd") -> MimeTypes.APPLICATION_MPD
+        cloudChannel?.type == "dash" -> MimeTypes.APPLICATION_MPD
+        else -> inferPlaybackMimeType(url)
+    }
     if (!mimeType.isNullOrBlank()) builder.setMimeType(mimeType)
 
     LogCollector.log("Building MediaItem for: $url (Mime: $mimeType)")
@@ -2120,10 +2141,11 @@ fun initializePlayer(
     getCurrentVideoUrl: () -> String,
     context: Context,
     retryCountRef: MutableState<Int>,
-    cloudChannel: CloudChannel? = null,
+    getDynamicHeaders: () -> Map<String, String>? = { null },
+    getDynamicUserAgent: () -> String? = { null },
     onError: (String) -> Unit = {}
 ): ExoPlayer {
-    LogCollector.log("Initializing Player for ${cloudChannel?.name ?: "Unknown"}")
+    LogCollector.log("Initializing Persistent ExoPlayer Instance")
 
     val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -2132,19 +2154,20 @@ fun initializePlayer(
         .followSslRedirects(true)
         .build()
 
-    val httpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
-        .setUserAgent(cloudChannel?.userAgent ?: "CloudPlay")
-
-    cloudChannel?.headers?.let { headers ->
-        LogCollector.log("Setting custom headers: ${headers.keys}")
-        httpDataSourceFactory.setDefaultRequestProperties(headers)
+    val httpDataSourceFactory = object : androidx.media3.datasource.DataSource.Factory {
+        override fun createDataSource(): androidx.media3.datasource.DataSource {
+            val headers = getDynamicHeaders()
+            val ua = getDynamicUserAgent() ?: "CloudPlay"
+            val factory = OkHttpDataSource.Factory(okHttpClient).setUserAgent(ua)
+            headers?.let { factory.setDefaultRequestProperties(it) }
+            return factory.createDataSource()
+        }
     }
+
     val mediaSourceFactory =
-            DefaultMediaSourceFactory(context)
-                .setDataSourceFactory(httpDataSourceFactory)
-                // Pre-fetch segments 15 s ahead of playback position at the factory level
-                // (complements the per-MediaItem live configuration below).
-                .setLiveTargetOffsetMs(15_000)
+        DefaultMediaSourceFactory(context)
+            .setDataSourceFactory(httpDataSourceFactory)
+            .setLiveTargetOffsetMs(15_000)
 
     // Buffer tuning for smooth live-stream playback:
     //   minBufferMs  20 s  – start refilling as soon as ahead-buffer < 20 s
