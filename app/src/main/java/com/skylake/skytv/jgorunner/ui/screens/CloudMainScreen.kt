@@ -294,6 +294,27 @@ fun CloudMainScreen(
                 }
                 item {
                     SettingsActionItem(
+                        label = "Refresh Channels",
+                        icon = Icons.Default.Refresh,
+                        onClick = {
+                            currentServer?.let {
+                                scope.launch {
+                                    isLoadingChannels = true
+                                    errorMessage = null
+                                    try {
+                                        channels = repository.fetchChannels(it.url, forceRefresh = true)
+                                    } catch (e: Exception) {
+                                        errorMessage = "Refresh failed: ${e.localizedMessage}"
+                                    } finally {
+                                        isLoadingChannels = false
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
+                item {
+                    SettingsActionItem(
                         label = "Clear Cache",
                         icon = Icons.Default.DeleteSweep,
                         onClick = {

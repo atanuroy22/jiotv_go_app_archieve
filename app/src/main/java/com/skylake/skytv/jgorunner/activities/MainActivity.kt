@@ -155,15 +155,13 @@ class MainActivity : ComponentActivity() {
         val appPackageName = preferenceManager.myPrefs.iptvAppPackageName
 
         val isTvZoneSelected = appPackageName.equals("tvzone", ignoreCase = true)
-        val shouldOpenZoneOnStart = isTvZoneSelected || preferenceManager.myPrefs.startTvAutomatically
 
         if (isTvZoneSelected) {
             preferenceManager.myPrefs.autoStartIPTV = false
         }
-        // Cloud UI is now the default startup interface
-        // if (shouldOpenZoneOnStart) {
-        //     currentScreen = "Zone"
-        // }
+
+        // Ensure we always start on CloudHome
+        currentScreen = "CloudHome"
 
         if (preferenceManager.myPrefs.jtvGoBinaryVersion?.contains(
                 "develop",
@@ -1072,7 +1070,8 @@ class MainActivity : ComponentActivity() {
                     isServerRunning = true
                     isGlowBox = true
 
-                    if (preferenceManager.myPrefs.autoStartIPTV) {
+                    // Disable autoStartIPTV redirection if we are in Cloud UI
+                    if (preferenceManager.myPrefs.autoStartIPTV && currentScreen != "CloudHome" && currentScreen != "CloudMain") {
                         countdownJob?.cancel() // Cancel any existing countdown job
 
                         var countdownTime = preferenceManager.myPrefs.iptvLaunchCountdown
