@@ -491,7 +491,7 @@ class MainActivity : ComponentActivity() {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(innerPadding)
+                            .padding(bottom = innerPadding.calculateBottomPadding())
                     ) {
                         when (currentScreen) {
                             "CloudHome" -> CloudHomeScreen(

@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -77,6 +79,7 @@ fun CloudMainScreen(
 
     var showCategoryDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showLogDialog by remember { mutableStateOf(false) }
 
     val serverListFocusRequester = remember { FocusRequester() }
     val settingsFocusRequester = remember { FocusRequester() }
@@ -321,10 +324,10 @@ fun CloudMainScreen(
                 }
                 item {
                     SettingsActionItem(
-                        label = "Copy Debug Logs",
-                        icon = Icons.Default.ContentCopy,
+                        label = "View Debug Logs",
+                        icon = Icons.Default.BugReport,
                         onClick = {
-                            LogCollector.copyToClipboard(context)
+                            showLogDialog = true
                         }
                     )
                 }
@@ -506,6 +509,44 @@ fun CloudMainScreen(
             }
         )
     }
+
+    if (showLogDialog) {
+        LogViewerDialog(
+            onDismiss = { showLogDialog = false },
+            onCopy = { LogCollector.copyToClipboard(context) }
+        )
+    }
+}
+
+@Composable
+fun LogViewerDialog(onDismiss: () -> Unit, onCopy: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Debug Logs") },
+        text = {
+            val logs = remember { LogCollector.getLogs() }
+            Column {
+                Text(
+                    text = if (logs.isEmpty()) "No logs found." else logs,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp)
+                        .verticalScroll(rememberScrollState()),
+                    fontSize = 12.sp,
+                    color = Color.LightGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onCopy) { Text("Copy to Clipboard") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+        containerColor = Color(0xFF1E1E1E),
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
 }
 
 @Composable
