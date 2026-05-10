@@ -162,9 +162,6 @@ class MainActivity : ComponentActivity() {
             preferenceManager.myPrefs.autoStartIPTV = false
         }
 
-        // Ensure we always start on CloudHome
-        currentScreen = "CloudHome"
-
         if (preferenceManager.myPrefs.jtvGoBinaryVersion?.contains(
                 "develop",
                 ignoreCase = true
@@ -424,6 +421,19 @@ class MainActivity : ComponentActivity() {
             onJTVServerRun()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNavigationIntent(intent)
+    }
+
+    private fun handleNavigationIntent(intent: Intent?) {
+        val targetScreen = intent?.getStringExtra("target_screen")
+        if (!targetScreen.isNullOrEmpty()) {
+            currentScreen = targetScreen
+        }
+    }
+
     @SuppressLint("UnspecifiedRegisterReceiverFlag", "NewApi")
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -431,6 +441,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         requestNotificationPermissions()
         preferenceManager = SkySharedPref.getInstance(this)
+        handleNavigationIntent(intent)
 
         isSwitchDarkMode = preferenceManager.myPrefs.darkMODE
 

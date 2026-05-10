@@ -780,7 +780,7 @@ fun ExoPlayJetScreen(
             }
 
             val isDrmRoute = isLikelyDrmRoute(currentUrlRaw) || isLikelyDrmRoute(currentUrl)
-            if (isDrmRoute) {
+            if (isDrmRoute && useZoneDrmWebPlayer) {
                 // DRM channels are rendered in embedded Shaka WebView to keep Zone UI shell.
                 try {
                     exoPlayer.stop()
@@ -1962,7 +1962,14 @@ fun ChannelInfoOverlay(
                         Spacer(modifier = Modifier.width(8.dp))
 
                         IconButton(
-                            onClick = { (context as? Activity)?.finish() },
+                            onClick = {
+                                val intent = Intent(context, com.skylake.skytv.jgorunner.activities.MainActivity::class.java).apply {
+                                    putExtra("target_screen", "CloudHome")
+                                    addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                                }
+                                context.startActivity(intent)
+                                (context as? Activity)?.finish()
+                            },
                             modifier = Modifier.size(48.dp)
                         ) {
                             Icon(Icons.Default.Home, contentDescription = "Home", tint = Color.White)
@@ -1973,6 +1980,11 @@ fun ChannelInfoOverlay(
                         IconButton(
                             onClick = {
                                 // User wants the "Channels Controller" (CloudMainScreen)
+                                val intent = Intent(context, com.skylake.skytv.jgorunner.activities.MainActivity::class.java).apply {
+                                    putExtra("target_screen", "CloudMain")
+                                    addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                                }
+                                context.startActivity(intent)
                                 (context as? Activity)?.finish()
                             },
                             modifier = Modifier.size(48.dp)
@@ -2099,8 +2111,8 @@ private fun buildMediaItemForPlaybackUrl(url: String, cloudChannel: CloudChannel
 private fun inferPlaybackMimeType(url: String): String? {
     val cleaned = url.substringBefore('#').substringBefore('?').lowercase()
     return when {
-        cleaned.endsWith(".m3u8") || cleaned.contains(".m3u8") -> MimeTypes.APPLICATION_M3U8
-        cleaned.endsWith(".mpd") || cleaned.contains(".mpd") -> MimeTypes.APPLICATION_MPD
+        cleaned.endsWith(".m3u8") || cleaned.contains(".m3u8") || cleaned.contains("render.m3u8") -> MimeTypes.APPLICATION_M3U8
+        cleaned.endsWith(".mpd") || cleaned.contains(".mpd") || cleaned.contains("render.mpd") || cleaned.contains("render.dash") -> MimeTypes.APPLICATION_MPD
         // Plugin channels (e.g. /zee5/...) served by the local server have no file extension.
         // All local-server endpoints ultimately serve HLS, so hint ExoPlayer accordingly.
         cleaned.contains("localhost") && !cleaned.substringAfterLast("/").contains(".") -> MimeTypes.APPLICATION_M3U8
