@@ -554,6 +554,7 @@ fun SettingsToggle(
     onCheckedChange: (Boolean) -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    var localChecked by remember(checked) { mutableStateOf(checked) }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -561,15 +562,22 @@ fun SettingsToggle(
             .fillMaxWidth()
             .onFocusChanged { isFocused = it.isFocused }
             .focusable()
-            .clickable { onCheckedChange(!checked) }
+            .clickable {
+                val newValue = !localChecked
+                localChecked = newValue
+                onCheckedChange(newValue)
+            }
             .padding(8.dp)
             .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(8.dp))
             .padding(8.dp)
     ) {
         Text(label, color = Color.White, modifier = Modifier.weight(1f), fontSize = 14.sp)
         Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
+            checked = localChecked,
+            onCheckedChange = {
+                localChecked = it
+                onCheckedChange(it)
+            },
             colors = SwitchDefaults.colors(checkedThumbColor = Color.Cyan)
         )
     }
