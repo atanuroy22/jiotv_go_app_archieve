@@ -599,6 +599,7 @@ fun ExoPlayJetScreen(
     val exoPlayer = remember {
         initializePlayer(
             getCurrentVideoUrl = { overrideVideoUrl ?: activeCloudChannel?.mpdUrl ?: activeCloudChannel?.m3u8Url ?: channelList?.getOrNull(currentIndex)?.videoUrl ?: videoUrl },
+            getCurrentCloudChannel = { activeCloudChannel },
             context = context,
             retryCountRef = retryCountRef,
             getDynamicHeaders = { headerState.value },
@@ -2139,6 +2140,7 @@ private fun toZoneDrmUrl(inputUrl: String, localPort: Int, quality: String?): St
 @UnstableApi
 fun initializePlayer(
     getCurrentVideoUrl: () -> String,
+    getCurrentCloudChannel: () -> CloudChannel? = { null },
     context: Context,
     retryCountRef: MutableState<Int>,
     getDynamicHeaders: () -> Map<String, String>? = { null },
@@ -2217,7 +2219,7 @@ fun initializePlayer(
     fun prepareAndPlay(seekToPosition: Long = 0L) {
         val normalizedUrl = normalizePlaybackUrl(context, getCurrentVideoUrl())
         if (normalizedUrl.isBlank()) return
-        val mediaItem = buildMediaItemForPlaybackUrl(normalizedUrl, cloudChannel)
+        val mediaItem = buildMediaItemForPlaybackUrl(normalizedUrl, getCurrentCloudChannel())
         player.setMediaItem(mediaItem)
         player.prepare()
         if (seekToPosition > 0L) {
