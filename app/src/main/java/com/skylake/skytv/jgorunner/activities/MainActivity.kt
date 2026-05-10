@@ -27,10 +27,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,7 +50,6 @@ import com.skylake.skytv.jgorunner.core.update.DownloadModelNew
 import com.skylake.skytv.jgorunner.core.update.DownloadProgress
 import com.skylake.skytv.jgorunner.core.update.SemanticVersionNew
 import com.skylake.skytv.jgorunner.core.update.Status
-import com.skylake.skytv.jgorunner.data.CloudDataManager
 import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.services.BinaryService
 import com.skylake.skytv.jgorunner.services.player.LandingPage
@@ -62,11 +59,7 @@ import com.skylake.skytv.jgorunner.ui.components.JTVModeSelectorPopup
 import com.skylake.skytv.jgorunner.ui.components.LoginPopup
 import com.skylake.skytv.jgorunner.ui.components.ProgressPopup
 import com.skylake.skytv.jgorunner.ui.components.RedirectPopup
-import com.google.gson.Gson
-import com.skylake.skytv.jgorunner.services.player.ExoPlayJet
 import com.skylake.skytv.jgorunner.ui.screens.CastScreen
-import com.skylake.skytv.jgorunner.ui.screens.CloudHomeScreen
-import com.skylake.skytv.jgorunner.ui.screens.CloudMainScreen
 import com.skylake.skytv.jgorunner.ui.screens.DebugScreen
 import com.skylake.skytv.jgorunner.ui.screens.HomeScreen
 import com.skylake.skytv.jgorunner.ui.screens.InfoScreen
@@ -75,7 +68,6 @@ import com.skylake.skytv.jgorunner.ui.screens.LoginScreenPop
 import com.skylake.skytv.jgorunner.ui.screens.RunnerScreen
 import com.skylake.skytv.jgorunner.ui.screens.SettingsScreen
 import com.skylake.skytv.jgorunner.ui.screens.ZoneScreen
-import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import com.skylake.skytv.jgorunner.ui.theme.JGOTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -103,7 +95,7 @@ class MainActivity : ComponentActivity() {
     private var outputText by mutableStateOf("ℹ️ Output logs")
     private var currentScreen by mutableStateOf("CloudHome") // Default to the new Cloud UI
 
-    private var selectedCloudServer by mutableStateOf<CloudServer?>(null)
+    private var selectedCloudServer by mutableStateOf<com.skylake.skytv.jgorunner.ui.tvhome.CloudServer?>(null)
 
     private val executor = Executors.newSingleThreadExecutor()
     private var showBinaryUpdatePopup by mutableStateOf(false)
@@ -157,10 +149,17 @@ class MainActivity : ComponentActivity() {
         val appPackageName = preferenceManager.myPrefs.iptvAppPackageName
 
         val isTvZoneSelected = appPackageName.equals("tvzone", ignoreCase = true)
+        val shouldOpenZoneOnStart = isTvZoneSelected || preferenceManager.myPrefs.startTvAutomatically
 
         if (isTvZoneSelected) {
             preferenceManager.myPrefs.autoStartIPTV = false
         }
+        if (shouldOpenZoneOnStart) {
+            currentScreen = "Zone"
+        }
+
+        // Ensure we always start on CloudHome
+        currentScreen = "CloudHome"
 
         if (preferenceManager.myPrefs.jtvGoBinaryVersion?.contains(
                 "develop",
@@ -260,9 +259,9 @@ class MainActivity : ComponentActivity() {
 
         // Keep startup landing consistent for TVZone users.
         // If startup is still on Home after setup checks, route to Zone.
-        // if (shouldOpenZoneOnStart && currentScreen == "Home") {
-        //     currentScreen = "Zone"
-        // }
+        if (shouldOpenZoneOnStart && currentScreen == "Home") {
+            currentScreen = "Zone"
+        }
 
         if (isServerRunning) {
             BinaryService.instance?.binaryOutput?.observe(this) {
@@ -487,11 +486,10 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             JGOTheme(themeOverride = isSwitchDarkMode) {
-                val hideNavBar = currentScreen == "Zone"
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
-                        if (!hideNavBar) {
+                        if (currentScreen != "Zone" && currentScreen != "CloudHome" && currentScreen != "CloudMain") {
                             BottomNavigationBar(
                                 currentScreen = currentScreen,
                                 setCurrentScreen = { currentScreen = it }
@@ -502,10 +500,10 @@ class MainActivity : ComponentActivity() {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(bottom = innerPadding.calculateBottomPadding())
+                            .padding(innerPadding)
                     ) {
                         when (currentScreen) {
-                            "CloudHome" -> CloudHomeScreen(
+                            "CloudHome" -> com.skylake.skytv.jgorunner.ui.screens.CloudHomeScreen(
                                 context = this@MainActivity,
                                 onNavigate = { currentScreen = it },
                                 onServerSelected = { server ->
@@ -517,7 +515,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
 
-                            "CloudMain" -> CloudMainScreen(
+                            "CloudMain" -> com.skylake.skytv.jgorunner.ui.screens.CloudMainScreen(
                                 context = this@MainActivity,
                                 initialServer = selectedCloudServer,
                                 onNavigate = { currentScreen = it },
@@ -525,15 +523,10 @@ class MainActivity : ComponentActivity() {
                                     preferenceManager.myPrefs.lastCloudPlayedChannelId = channel.id
                                     preferenceManager.savePreferences()
 
-                                    // Use shared manager to avoid TransactionTooLargeException
-                                    CloudDataManager.currentChannelList = list
+                                    com.skylake.skytv.jgorunner.data.CloudDataManager.currentChannelList = list
                                     val channelIndex = list.indexOf(channel)
 
-                                    val intent = Intent(this@MainActivity, ExoPlayJet::class.java).apply {
-                                        putExtra("video_url", channel.mpdUrl ?: channel.m3u8Url)
-                                        putExtra("ch_name", channel.name)
-                                        putExtra("logo_url", channel.logo)
-                                        putExtra("cloud_channel_json", Gson().toJson(channel))
+                                    val intent = Intent(this@MainActivity, CloudPlayerActivity::class.java).apply {
                                         putExtra("current_cloud_channel_index", channelIndex)
                                     }
                                     startActivity(intent)
@@ -1084,8 +1077,7 @@ class MainActivity : ComponentActivity() {
                     isServerRunning = true
                     isGlowBox = true
 
-                    // Disable autoStartIPTV redirection if we are in Cloud UI
-                    if (preferenceManager.myPrefs.autoStartIPTV && currentScreen != "CloudHome" && currentScreen != "CloudMain") {
+                    if (preferenceManager.myPrefs.autoStartIPTV) {
                         countdownJob?.cancel() // Cancel any existing countdown job
 
                         var countdownTime = preferenceManager.myPrefs.iptvLaunchCountdown

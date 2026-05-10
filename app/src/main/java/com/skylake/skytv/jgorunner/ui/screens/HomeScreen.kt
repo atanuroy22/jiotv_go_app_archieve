@@ -29,7 +29,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.twotone.DirectionsRun
 import androidx.compose.material.icons.automirrored.twotone.ExitToApp
-import androidx.compose.material.icons.twotone.Cloud
 import androidx.compose.material.icons.twotone.Landscape
 import androidx.compose.material.icons.twotone.LiveTv
 import androidx.compose.material.icons.twotone.PlayCircleOutline
@@ -83,9 +82,9 @@ fun HomeScreen(
     onRunServerButtonClick: () -> Unit,
     onStopServerButtonClick: () -> Unit,
     onRunIPTVButtonClick: () -> Unit,
-    onCloudPlayButtonClick: () -> Unit,
     onWebTVButtonClick: () -> Unit,
     onDebugButtonClick: () -> Unit,
+    onCloudPlayButtonClick: () -> Unit,
     onExitButtonClick: () -> Unit
 ) {
 
@@ -214,13 +213,15 @@ fun HomeScreen(
             RunIPTVButton {
                 onRunIPTVButtonClick()
             }
-            CloudPlayButton {
-                onCloudPlayButtonClick()
-            }
             DebugButton(
                 enabled = isServerRunning
             ) {
                 onDebugButtonClick()
+            }
+            CloudPlayButton(
+                enabled = isServerRunning
+            ) {
+                onCloudPlayButtonClick()
             }
             WebTVButton(
                 enabled = isServerRunning
@@ -348,33 +349,6 @@ fun RowScope.StopServerButton(
 }
 
 @Composable
-fun RowScope.CloudPlayButton(
-    onClick: () -> Unit
-) {
-    val colorPRIME = MaterialTheme.colorScheme.primary
-    val colorSECOND = MaterialTheme.colorScheme.secondary
-    val buttonColor = remember { mutableStateOf(colorPRIME) }
-    val colorBORDER = Color(0xFF00E5FF)
-    val isFocused = remember { mutableStateOf(false) }
-    Button(
-        onClick = { onClick() },
-        modifier = Modifier
-            .weight(1f)
-            .padding(8.dp)
-            .onFocusChanged { focusState ->
-                isFocused.value = focusState.isFocused
-                buttonColor.value = if (focusState.isFocused) colorSECOND else colorPRIME
-            },
-        shape = RoundedCornerShape(8.dp),
-        border = if (isFocused.value) BorderStroke(2.dp, colorBORDER) else null,
-        colors = ButtonDefaults.buttonColors(containerColor = buttonColor.value),
-        contentPadding = PaddingValues(2.dp)
-    ) {
-        ButtonContent("Cloud Play", Icons.TwoTone.Cloud)
-    }
-}
-
-@Composable
 fun RowScope.RunIPTVButton(
     onClick: () -> Unit
 ) {
@@ -460,6 +434,37 @@ fun RowScope.DebugButton(
         enabled = enabled
     ) {
         ButtonContent("TV", Icons.TwoTone.Landscape)
+    }
+}
+
+@Composable
+fun RowScope.CloudPlayButton(
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val colorPRIME = MaterialTheme.colorScheme.primary
+    val colorSECOND = MaterialTheme.colorScheme.secondary
+    val buttonColor = remember { mutableStateOf(colorPRIME) }
+    val colorBORDER = Color(0xFF00BFFF)
+    val isFocused = remember { mutableStateOf(false) }
+    Button(
+        onClick = {
+            onClick()
+        },
+        modifier = Modifier
+            .weight(1f)
+            .padding(8.dp)
+            .onFocusChanged { focusState ->
+                isFocused.value = focusState.isFocused
+                buttonColor.value = if (focusState.isFocused) colorSECOND else colorPRIME
+            },
+        shape = RoundedCornerShape(8.dp),
+        border = if (isFocused.value) BorderStroke(2.dp, colorBORDER) else null,
+        colors = ButtonDefaults.buttonColors(containerColor = buttonColor.value),
+        contentPadding = PaddingValues(2.dp),
+        enabled = enabled
+    ) {
+        ButtonContent("Cloud", Icons.TwoTone.PlayCircleOutline)
     }
 }
 
