@@ -4,25 +4,21 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import java.util.LinkedList
+import java.util.concurrent.CopyOnWriteArrayList
 
 object LogCollector {
-    private val logs = LinkedList<String>()
+    private val logs = CopyOnWriteArrayList<String>()
     private const val MAX_LOGS = 100
 
     fun log(message: String) {
-        synchronized(logs) {
-            logs.addFirst("${System.currentTimeMillis()}: $message")
-            if (logs.size > MAX_LOGS) {
-                logs.removeLast()
-            }
+        logs.add(0, "${System.currentTimeMillis()}: $message")
+        if (logs.size > MAX_LOGS) {
+            logs.removeAt(logs.size - 1)
         }
     }
 
     fun getLogs(): String {
-        return synchronized(logs) {
-            logs.joinToString("\n")
-        }
+        return logs.joinToString("\n")
     }
 
     fun copyToClipboard(context: Context) {
