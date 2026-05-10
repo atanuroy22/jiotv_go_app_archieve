@@ -1,6 +1,7 @@
 package com.skylake.skytv.jgorunner.ui.screens
 
 import android.app.Activity
+import android.widget.Toast
 import android.content.Context
 import android.util.Log
 import android.view.KeyEvent
@@ -61,6 +62,7 @@ fun CloudMainScreen(
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var channels by remember { mutableStateOf<List<CloudChannel>>(emptyList()) }
     var isLoadingChannels by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     var isSearchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -99,8 +101,19 @@ fun CloudMainScreen(
     LaunchedEffect(currentServer) {
         currentServer?.let { server ->
             isLoadingChannels = true
-            channels = repository.fetchChannels(server.url)
-            isLoadingChannels = false
+            errorMessage = null
+            try {
+                val fetchedChannels = repository.fetchChannels(server.url)
+                if (fetchedChannels.isEmpty()) {
+                    errorMessage = "No channels found or network error."
+                }
+                channels = fetchedChannels
+            } catch (e: Exception) {
+                errorMessage = "Failed to fetch channels: ${e.localizedMessage}"
+                Log.e("CloudMainScreen", "Error fetching channels", e)
+            } finally {
+                isLoadingChannels = false
+            }
 
             // Autoplay logic if enabled
             if (preferenceManager.myPrefs.cloudAutoplayFirstChannel && channels.isNotEmpty()) {
@@ -165,8 +178,18 @@ fun CloudMainScreen(
                     currentServer?.let {
                         scope.launch {
                             isLoadingChannels = true
-                            channels = repository.fetchChannels(it.url, forceRefresh = true)
-                            isLoadingChannels = false
+                            errorMessage = null
+                            try {
+                                val fetchedChannels = repository.fetchChannels(it.url, forceRefresh = true)
+                                if (fetchedChannels.isEmpty()) {
+                                    errorMessage = "No channels found or network error."
+                                }
+                                channels = fetchedChannels
+                            } catch (e: Exception) {
+                                errorMessage = "Failed to fetch channels: ${e.localizedMessage}"
+                            } finally {
+                                isLoadingChannels = false
+                            }
                         }
                     }
                 },
@@ -201,6 +224,16 @@ fun CloudMainScreen(
                         checked = preferenceManager.myPrefs.cloudAutoplayFirstChannel,
                         onCheckedChange = {
                             preferenceManager.myPrefs.cloudAutoplayFirstChannel = it
+                            preferenceManager.savePreferences()
+                        }
+                    )
+                }
+                item {
+                    SettingsToggle(
+                        label = "Dark Mode",
+                        checked = preferenceManager.myPrefs.darkMODE,
+                        onCheckedChange = {
+                            preferenceManager.myPrefs.darkMODE = it
                             preferenceManager.savePreferences()
                         }
                     )
@@ -257,6 +290,37 @@ fun CloudMainScreen(
                         label = "Search Channels",
                         icon = Icons.Default.Search,
                         onClick = { isSearchVisible = !isSearchVisible }
+                    )
+                }
+                item {
+                    SettingsActionItem(
+                        label = "Refresh Channels",
+                        icon = Icons.Default.Refresh,
+                        onClick = {
+                            currentServer?.let {
+                                scope.launch {
+                                    isLoadingChannels = true
+                                    errorMessage = null
+                                    try {
+                                        channels = repository.fetchChannels(it.url, forceRefresh = true)
+                                    } catch (e: Exception) {
+                                        errorMessage = "Refresh failed: ${e.localizedMessage}"
+                                    } finally {
+                                        isLoadingChannels = false
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
+                item {
+                    SettingsActionItem(
+                        label = "Clear Cache",
+                        icon = Icons.Default.DeleteSweep,
+                        onClick = {
+                            repository.clearCache()
+                            Toast.makeText(context, "Cache cleared", Toast.LENGTH_SHORT).show()
+                        }
                     )
                 }
                 item {
@@ -352,6 +416,27 @@ fun CloudMainScreen(
             if (isLoadingChannels) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Color.Cyan)
+                }
+            } else if (errorMessage != null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Error, contentDescription = null, tint = Color.Red, modifier = Modifier.size(48.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(text = errorMessage!!, color = Color.White, textAlign = TextAlign.Center)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = {
+                            currentServer?.let {
+                                scope.launch {
+                                    isLoadingChannels = true
+                                    errorMessage = null
+                                    channels = repository.fetchChannels(it.url, forceRefresh = true)
+                                    isLoadingChannels = false
+                                }
+                            }
+                        }) {
+                            Text("Retry")
+                        }
+                    }
                 }
             } else {
                 LazyVerticalGrid(

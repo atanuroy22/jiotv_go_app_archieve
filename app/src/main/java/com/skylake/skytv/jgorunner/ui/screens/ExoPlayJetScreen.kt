@@ -323,11 +323,14 @@ fun ExoPlayJetScreen(
     var videoAspect by remember { mutableFloatStateOf(16f / 9f) }
 
     // --- Key Num Entry ---
-    fun commitNumericEntryLocal(list: ArrayList<ChannelInfo>?) {
+    fun commitNumericEntry(list: ArrayList<ChannelInfo>?, cloudList: List<CloudChannel>?) {
         val num = numericBuffer.toIntOrNull()
-        if (num != null && !list.isNullOrEmpty()) {
-            val idx = (num - 1).coerceIn(0, list.size - 1)
-            currentIndex = idx
+        if (num != null) {
+            val total = if (!cloudList.isNullOrEmpty()) cloudList.size else list?.size ?: 0
+            if (total > 0) {
+                val idx = (num - 1).coerceIn(0, total - 1)
+                currentIndex = idx
+            }
         }
         numericBuffer = ""
         showNumericOverlay = false
@@ -976,9 +979,14 @@ fun ExoPlayJetScreen(
                     return@onPreviewKeyEvent true
                 }
 
-                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft && tvNAV != "2" && !useZoneDrmWebPlayer) {
+                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft && !useZoneDrmWebPlayer) {
                     panelSelectedIndex = currentIndex
-                    showChannelPanel = channelList != null
+                    showChannelPanel = (channelList != null || cloudChannelList != null)
+                    return@onPreviewKeyEvent true
+                }
+
+                if (event.type == KeyEventType.KeyDown && event.key == Key.Back && event.nativeKeyEvent.isLongPress) {
+                    (context as? Activity)?.finish()
                     return@onPreviewKeyEvent true
                 }
 
@@ -1003,7 +1011,7 @@ fun ExoPlayJetScreen(
                             numericJob?.cancel()
                             numericJob = scope.launch {
                                 delay(1200)
-                                commitNumericEntryLocal(channelList)
+                                commitNumericEntry(channelList, cloudChannelList)
                             }
                         }
                         return@onPreviewKeyEvent true
@@ -1583,7 +1591,7 @@ fun ExoPlayJetScreen(
         }
 
         // Left-side channel panel
-        if (showChannelPanel && channelList != null) {
+        if (showChannelPanel && (channelList != null || cloudChannelList != null)) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -1598,57 +1606,102 @@ fun ExoPlayJetScreen(
                     state = listState,
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    itemsIndexed(
-                        items = channelList,
-                        key = { idx, _ -> idx }
-                    ) { idx, ch ->
-                        val isSelected = idx == panelSelectedIndex
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(if (isSelected) Color(0x33FFFFFF) else Color.Transparent)
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color.Transparent)
-                                .clickable {
-                                    panelSelectedIndex = idx
-                                    currentIndex = idx
-                                    showChannelPanel = false
-                                },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data(ch.logoUrl)
-                                    .size(80)
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = "Logo",
-                                contentScale = ContentScale.Fit,
+                    if (cloudChannelList != null) {
+                        itemsIndexed(
+                            items = cloudChannelList,
+                            key = { idx, _ -> "cloud_$idx" }
+                        ) { idx, ch ->
+                            val isSelected = idx == panelSelectedIndex
+                            Row(
                                 modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                            )
-
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = String.format("%02d", idx + 1),
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(40.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            val channelId = extractChannelIdFromPlayUrl(ch.videoUrl)
-                            Column {
+                                    .fillMaxWidth()
+                                    .background(if (isSelected) Color(0x33FFFFFF) else Color.Transparent)
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        panelSelectedIndex = idx
+                                        currentIndex = idx
+                                        showChannelPanel = false
+                                    },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AsyncImage(
+                                    model = ch.logo,
+                                    contentDescription = "Logo",
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = ch.channelName,
+                                    text = String.format("%02d", idx + 1),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.width(40.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = ch.name,
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 18.sp,
                                     maxLines = 1
                                 )
-                                EpgText(channelId, epgCache)
+                            }
+                        }
+                    } else if (channelList != null) {
+                        itemsIndexed(
+                            items = channelList,
+                            key = { idx, _ -> idx }
+                        ) { idx, ch ->
+                            val isSelected = idx == panelSelectedIndex
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(if (isSelected) Color(0x33FFFFFF) else Color.Transparent)
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        panelSelectedIndex = idx
+                                        currentIndex = idx
+                                        showChannelPanel = false
+                                    },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(ch.logoUrl)
+                                        .size(80)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = "Logo",
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = String.format("%02d", idx + 1),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.width(40.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                val channelId = extractChannelIdFromPlayUrl(ch.videoUrl)
+                                Column {
+                                    Text(
+                                        text = ch.channelName,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                        maxLines = 1
+                                    )
+                                    EpgText(channelId, epgCache)
+                                }
                             }
                         }
                     }

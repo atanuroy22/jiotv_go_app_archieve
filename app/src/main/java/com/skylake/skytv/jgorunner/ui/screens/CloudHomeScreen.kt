@@ -49,18 +49,21 @@ fun CloudHomeScreen(
     var isLoading by remember { mutableStateOf(true) }
     var countdown by remember { mutableIntStateOf(5) }
     var isAutoplayCancelled by remember { mutableStateOf(false) }
+    val autoplayEnabledState = remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayEnabled) }
     val focusRequesters = remember { mutableStateMapOf<Int, FocusRequester>() }
 
     LaunchedEffect(Unit) {
         servers = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
         isLoading = false
+    }
 
-        if (preferenceManager.myPrefs.cloudAutoplayEnabled && servers.isNotEmpty()) {
-            while (countdown > 0 && !isAutoplayCancelled) {
+    LaunchedEffect(servers, isAutoplayCancelled) {
+        if (autoplayEnabledState.value && servers.isNotEmpty() && !isAutoplayCancelled) {
+            while (countdown > 0 && !isAutoplayCancelled && autoplayEnabledState.value) {
                 delay(1000)
                 countdown--
             }
-            if (!isAutoplayCancelled && countdown == 0) {
+            if (!isAutoplayCancelled && countdown == 0 && autoplayEnabledState.value) {
                 onServerSelected(servers.first())
             }
         }
@@ -130,7 +133,7 @@ fun CloudHomeScreen(
                 }
             }
 
-            if (preferenceManager.myPrefs.cloudAutoplayEnabled && !isAutoplayCancelled && countdown > 0 && servers.isNotEmpty()) {
+            if (autoplayEnabledState.value && !isAutoplayCancelled && countdown > 0 && servers.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(48.dp))
                 Text(
                     text = "Autostarting in $countdown seconds...",
@@ -150,8 +153,9 @@ fun CloudHomeScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(text = "Autoplay", color = Color.White, modifier = Modifier.padding(end = 8.dp))
                 Switch(
-                    checked = preferenceManager.myPrefs.cloudAutoplayEnabled,
+                    checked = autoplayEnabledState.value,
                     onCheckedChange = {
+                        autoplayEnabledState.value = it
                         preferenceManager.myPrefs.cloudAutoplayEnabled = it
                         preferenceManager.savePreferences()
                         if (!it) isAutoplayCancelled = true
