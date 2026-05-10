@@ -126,7 +126,7 @@ fun CloudPlayerScreen(
             .build().apply {
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
-                        LogCollector.log("CloudPlayer Error: ${error.errorCodeName} - ${error.message}")
+                        LogCollector.logError("CloudPlayer Error: ${error.errorCodeName} - ${error.message}", error)
                         playerError = error.errorCodeName
 
                         // Auto-retry logic
@@ -155,14 +155,18 @@ fun CloudPlayerScreen(
 
         val headers = ch?.headers ?: emptyMap()
         val rawUA = ch?.userAgent
+        val isJio = ch?.mpdUrl?.contains("jio.com") == true || ch?.m3u8Url?.contains("jio.com") == true ||
+                   ch?.licenseUrl?.contains("webplay.fun") == true
+
         val finalUA = if (rawUA == null || rawUA == "@cloudplay" || rawUA.isEmpty()) {
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            if (isJio) "JioTV/7.0.8 (Linux; Android 13; Build/TP1A.220624.014)" else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         } else {
             rawUA
         }
 
         val normalizedHeaders = mutableMapOf<String, String>()
         normalizedHeaders["User-Agent"] = finalUA
+
         headers.forEach { (k, v) ->
             val key = when {
                 k.equals("cookie", true) -> "Cookie"
@@ -177,8 +181,11 @@ fun CloudPlayerScreen(
             }
             normalizedHeaders[key] = v
         }
-        if (!normalizedHeaders.containsKey("X-Requested-With")) {
-            normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
+
+        if (isJio) {
+            if (!normalizedHeaders.containsKey("X-Requested-With")) normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
+            if (!normalizedHeaders.containsKey("os")) normalizedHeaders["os"] = "Android"
+            if (!normalizedHeaders.containsKey("devicetype")) normalizedHeaders["devicetype"] = "phone"
         }
 
         dynamicHeaders.value = normalizedHeaders
@@ -203,10 +210,11 @@ fun CloudPlayerScreen(
                 LogCollector.log("Setting Cloud DRM: $lic")
 
                 val drmHeaders = mutableMapOf<String, String>()
-                drmHeaders.putAll(dynamicHeaders.value)
+                drmHeaders.putAll(normalizedHeaders)
 
-                // Logging header keys for diagnostics
+                // Logging header keys and UA for diagnostics
                 LogCollector.log("DRM Headers: ${drmHeaders.keys.joinToString(", ")}")
+                LogCollector.log("DRM UA: ${drmHeaders["User-Agent"]}")
 
                 builder.setDrmConfiguration(
                     MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
@@ -402,16 +410,42 @@ fun CloudPlayerScreen(
             )
         }
 
+        var showPlayerLogDialog by remember { mutableStateOf(false) }
+
         if (playerError != null) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.Error, contentDescription = null, tint = Color.Red, modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text("Playback Error", color = Color.White, fontWeight = FontWeight.Bold)
-                    Text(playerError!!, color = Color.Red, fontSize = 12.sp)
-                    Button(onClick = { playerError = null; val c = currentIndex; currentIndex = -1; scope.launch { delay(100); currentIndex = c } }) {
-                        Text("Retry")
+                    Text(playerError!!, color = Color.Red, fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Row {
+                        Button(onClick = {
+                            playerError = null
+                            val c = currentIndex
+                            currentIndex = -1
+                            scope.launch { delay(100); currentIndex = c }
+                        }) {
+                            Text("Retry")
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Button(
+                            onClick = { showPlayerLogDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                        ) {
+                            Text("Show Logs")
+                        }
                     }
                 }
             }
+        }
+
+        if (showPlayerLogDialog) {
+            LogViewerDialog(
+                onDismiss = { showPlayerLogDialog = false },
+                onCopy = { LogCollector.copyToClipboard(context) }
+            )
         }
     }
 }
