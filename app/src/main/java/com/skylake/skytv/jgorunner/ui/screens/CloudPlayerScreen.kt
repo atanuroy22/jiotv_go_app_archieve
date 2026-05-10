@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -63,6 +64,11 @@ import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.utils.LogCollector
 import com.skylake.skytv.jgorunner.utils.normalizePlaybackUrl
+import com.skylake.skytv.jgorunner.utils.setupCustomPlaybackLogic
+import com.skylake.skytv.jgorunner.utils.cleanupPlaybackLogic
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
@@ -93,6 +99,7 @@ fun CloudPlayerScreen(
     var exoPlayerView: PlayerView? by remember { mutableStateOf(null) }
     var numericBuffer by remember { mutableStateOf("") }
     var showNumericOverlay by remember { mutableStateOf(false) }
+    var numericJob by remember { mutableStateOf<Job?>(null) }
 
     val headerState = remember { mutableStateOf<Map<String, String>?>(null) }
     val userAgentState = remember { mutableStateOf<String?>(null) }
@@ -107,7 +114,14 @@ fun CloudPlayerScreen(
             override fun createDataSource(): androidx.media3.datasource.DataSource {
                 val factory = OkHttpDataSource.Factory(okHttpClient)
                     .setUserAgent(userAgentState.value ?: "@cloudplay")
-                headerState.value?.let { factory.setDefaultRequestProperties(it) }
+
+                // Propagate headers with normalized keys
+                headerState.value?.let { h ->
+                    val normalized = h.mapKeys { (k, _) ->
+                        if (k.equals("cookie", true)) "Cookie" else k
+                    }
+                    factory.setDefaultRequestProperties(normalized)
+                }
                 return factory.createDataSource()
             }
         }
@@ -119,6 +133,22 @@ fun CloudPlayerScreen(
                     override fun onPlayerError(error: PlaybackException) {
                         LogCollector.log("CloudPlayer Error: ${error.errorCodeName} - ${error.message}")
                         playerError = error.errorCodeName
+
+                        // Auto-retry logic
+                        if (retryCountRef.value < 5) {
+                            retryCountRef.value++
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                prepare()
+                                play()
+                            }, 2000)
+                        }
+                    }
+
+                    override fun onPlaybackStateChanged(state: Int) {
+                        if (state == Player.STATE_READY) {
+                            retryCountRef.value = 0
+                            playerError = null
+                        }
                     }
                 })
             }
@@ -136,6 +166,8 @@ fun CloudPlayerScreen(
         val playbackUrl = ch?.mpdUrl ?: ch?.m3u8Url ?: ""
         if (playbackUrl.isNotBlank()) {
             val normalized = normalizePlaybackUrl(context, playbackUrl)
+            LogCollector.log("Playing Cloud URL: $normalized")
+
             val builder = MediaItem.Builder().setUri(normalized.toUri())
 
             if (normalized.contains(".mpd") || ch?.type == "dash") {
@@ -146,10 +178,14 @@ fun CloudPlayerScreen(
 
             ch?.licenseUrl?.let { lic ->
                 LogCollector.log("Setting Cloud DRM: $lic")
+                val drmHeaders = ch.headers?.mapKeys { (k, _) ->
+                    if (k.equals("cookie", true)) "Cookie" else k
+                } ?: emptyMap()
+
                 builder.setDrmConfiguration(
                     MediaItem.DrmConfiguration.Builder(androidx.media3.common.C.WIDEVINE_UUID)
                         .setLicenseUri(lic)
-                        .setLicenseRequestHeaders(ch.headers ?: emptyMap())
+                        .setLicenseRequestHeaders(drmHeaders)
                         .setMultiSession(true)
                         .setForceDefaultLicenseUri(true)
                         .build()
@@ -159,6 +195,8 @@ fun CloudPlayerScreen(
             exoPlayer.setMediaItem(builder.build())
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
+
+            setupCustomPlaybackLogic(exoPlayer, normalized)
         }
 
         showChannelOverlay = true
@@ -167,7 +205,7 @@ fun CloudPlayerScreen(
 
     LaunchedEffect(overlayVisibilityTick) {
         if (overlayVisibilityTick > 0L) {
-            kotlinx.coroutines.delay(5000)
+            delay(5000)
             if (!showChannelPanel) {
                 showChannelOverlay = false
             }
@@ -176,6 +214,7 @@ fun CloudPlayerScreen(
 
     DisposableEffect(exoPlayer) {
         onDispose {
+            cleanupPlaybackLogic(exoPlayer)
             exoPlayer.release()
         }
     }
@@ -215,30 +254,61 @@ fun CloudPlayerScreen(
                     Key.DirectionUp -> {
                         if (showChannelPanel) {
                             panelSelectedIndex = (panelSelectedIndex - 1 + cloudChannelList.size) % cloudChannelList.size
+                            return@onPreviewKeyEvent true
                         } else {
                             currentIndex = (currentIndex - 1 + cloudChannelList.size) % cloudChannelList.size
+                            return@onPreviewKeyEvent true
                         }
-                        return@onPreviewKeyEvent true
                     }
                     Key.DirectionDown -> {
                         if (showChannelPanel) {
                             panelSelectedIndex = (panelSelectedIndex + 1) % cloudChannelList.size
+                            return@onPreviewKeyEvent true
                         } else {
                             currentIndex = (currentIndex + 1) % cloudChannelList.size
+                            return@onPreviewKeyEvent true
                         }
-                        return@onPreviewKeyEvent true
                     }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                         if (showChannelPanel) {
                             currentIndex = panelSelectedIndex
                             showChannelPanel = false
+                            return@onPreviewKeyEvent true
                         } else {
                             showChannelOverlay = true
                             overlayVisibilityTick = System.currentTimeMillis()
                         }
-                        return@onPreviewKeyEvent true
+                    }
+                    Key.Back -> {
+                        if (showChannelPanel) {
+                            showChannelPanel = false
+                            return@onPreviewKeyEvent true
+                        }
                     }
                 }
+
+                // Numeric entry
+                val digit = when (event.key) {
+                    Key.Zero -> 0; Key.One -> 1; Key.Two -> 2; Key.Three -> 3; Key.Four -> 4
+                    Key.Five -> 5; Key.Six -> 6; Key.Seven -> 7; Key.Eight -> 8; Key.Nine -> 9
+                    else -> null
+                }
+                if (digit != null) {
+                    numericBuffer += digit.toString()
+                    showNumericOverlay = true
+                    numericJob?.cancel()
+                    numericJob = scope.launch {
+                        delay(1500)
+                        val num = numericBuffer.toIntOrNull()
+                        if (num != null && num in 1..cloudChannelList.size) {
+                            currentIndex = num - 1
+                        }
+                        numericBuffer = ""
+                        showNumericOverlay = false
+                    }
+                    return@onPreviewKeyEvent true
+                }
+
                 false
             }
     ) {
@@ -255,6 +325,7 @@ fun CloudPlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
+        // Overlays
         if (showChannelOverlay) {
             CloudPlayerOverlay(
                 channel = activeCloudChannel,
@@ -277,43 +348,40 @@ fun CloudPlayerScreen(
                     (context as? Activity)?.finish()
                 },
                 onRefreshClick = {
-                    val c = currentIndex
+                    val current = currentIndex
                     currentIndex = -1
-                    Handler(Looper.getMainLooper()).postDelayed({ currentIndex = c }, 100)
+                    scope.launch { delay(100); currentIndex = current }
                 }
             )
         }
 
         if (showChannelPanel) {
-            Box(modifier = Modifier.fillMaxHeight().width(300.dp).background(Color.Black.copy(alpha = 0.8f))) {
-                val listState = rememberLazyListState()
-                LaunchedEffect(Unit) { listState.scrollToItem(panelSelectedIndex) }
-                LazyColumn(state = listState) {
-                    itemsIndexed(cloudChannelList) { index, channel ->
-                        val isSelected = index == panelSelectedIndex
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(if (isSelected) Color.Cyan.copy(alpha = 0.3f) else Color.Transparent)
-                                .clickable { currentIndex = index; showChannelPanel = false }
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AsyncImage(model = channel.logo, contentDescription = null, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)))
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = channel.name, color = Color.White, maxLines = 1)
-                        }
-                    }
+            CloudSidePanel(
+                channels = cloudChannelList,
+                selectedIndex = panelSelectedIndex,
+                onChannelSelected = {
+                    currentIndex = it
+                    showChannelPanel = false
                 }
-            }
+            )
+        }
+
+        if (showNumericOverlay) {
+            Text(
+                text = numericBuffer,
+                color = Color.White,
+                fontSize = 48.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 50.dp)
+            )
         }
 
         if (playerError != null) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Playback Error", color = Color.White, fontWeight = FontWeight.Bold)
-                    Text(playerError!!, color = Color.Red)
-                    Button(onClick = { playerError = null; val c = currentIndex; currentIndex = -1; Handler(Looper.getMainLooper()).postDelayed({ currentIndex = c }, 100) }) {
+                    Text(playerError!!, color = Color.Red, fontSize = 12.sp)
+                    Button(onClick = { playerError = null; val c = currentIndex; currentIndex = -1; scope.launch { delay(100); currentIndex = c } }) {
                         Text("Retry")
                     }
                 }
@@ -338,7 +406,11 @@ fun CloudPlayerOverlay(
             shape = RoundedCornerShape(12.dp)
         ) {
             Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(model = channel?.logo, contentDescription = null, modifier = Modifier.size(50.dp).clip(RoundedCornerShape(8.dp)))
+                AsyncImage(
+                    model = channel?.logo,
+                    contentDescription = null,
+                    modifier = Modifier.size(50.dp).clip(RoundedCornerShape(8.dp))
+                )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(text = "${currentIndex + 1}. ${channel?.name ?: "Unknown"}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
@@ -352,6 +424,7 @@ fun CloudPlayerOverlay(
             }
         }
 
+        // Clock
         Card(
             modifier = Modifier.align(Alignment.TopEnd),
             colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.6f))
@@ -361,10 +434,40 @@ fun CloudPlayerOverlay(
                 while(true) {
                     val cal = Calendar.getInstance()
                     time = String.format("%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
-                    kotlinx.coroutines.delay(30000)
+                    delay(30000)
                 }
             }
             Text(text = time, color = Color.White, modifier = Modifier.padding(8.dp), fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+fun CloudSidePanel(
+    channels: List<CloudChannel>,
+    selectedIndex: Int,
+    onChannelSelected: (Int) -> Unit
+) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(selectedIndex) { listState.animateScrollToItem(selectedIndex) }
+
+    Box(modifier = Modifier.fillMaxHeight().width(300.dp).background(Color.Black.copy(alpha = 0.8f))) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            itemsIndexed(channels) { index, channel ->
+                val isSelected = index == selectedIndex
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(if (isSelected) Color.Cyan.copy(alpha = 0.3f) else Color.Transparent)
+                        .clickable { onChannelSelected(index) }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AsyncImage(model = channel.logo, contentDescription = null, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(text = channel.name, color = Color.White, maxLines = 1)
+                }
+            }
         }
     }
 }

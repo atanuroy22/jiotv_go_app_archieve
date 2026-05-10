@@ -177,7 +177,6 @@ fun ServerCard(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isFocused && focusAnimationEnabled) 1.15f * uiScale else 1.0f * uiScale)
-    val glowAlpha by animateFloatAsState(if (isFocused) 1f else 0f)
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -202,10 +201,14 @@ fun ServerCard(
                 .size(160.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color.DarkGray)
-                .border(
-                    width = 3.dp,
-                    color = if (isFocused) Color.Cyan else Color.Transparent,
-                    shape = RoundedCornerShape(16.dp)
+                .then(
+                    if (isFocused) {
+                        Modifier.border(
+                            width = 3.dp,
+                            color = Color.Cyan,
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                    } else Modifier
                 )
         ) {
             AsyncImage(
