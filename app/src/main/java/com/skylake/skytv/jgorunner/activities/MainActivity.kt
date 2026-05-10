@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
         if (isTvZoneSelected) {
             preferenceManager.myPrefs.autoStartIPTV = false
         }
-        if (shouldOpenZoneOnStart && currentScreen == "Home") {
+        if (shouldOpenZoneOnStart && (currentScreen == "Home" || currentScreen == "JioHome")) {
             currentScreen = "Zone"
         }
 
@@ -524,7 +524,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
 
-                            "Home" -> HomeScreen(
+                            "Home", "JioHome" -> HomeScreen(
                                 title = selectedBinaryName,
                                 titleShouldGlow = isGlowBox,
                                 isServerRunning = isServerRunning,
@@ -810,7 +810,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 "CloudHome" -> {
-                    finish()
+                    currentScreen = "JioHome"
                 }
 
                 "CloudMain" -> {
