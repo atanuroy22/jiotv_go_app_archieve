@@ -42,6 +42,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.skylake.skytv.jgorunner.data.CloudRepository
 import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.ui.components.MultiSelectFilterDialog
@@ -60,6 +62,7 @@ fun CloudMainScreen(
     val preferenceManager = SkySharedPref.getInstance(context)
     val repository = remember { CloudRepository(context) }
     val scope = rememberCoroutineScope()
+    val gson = remember { Gson() }
 
     var currentServer by remember { mutableStateOf(initialServer) }
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
@@ -67,26 +70,31 @@ fun CloudMainScreen(
     var isLoadingChannels by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    var isSidebarVisible by remember { mutableStateOf(true) }
     var isSearchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
-    var selectedCategories by remember {
-        mutableStateOf(
-            preferenceManager.myPrefs.cloudCategoryFilter?.split(",")?.toSet()?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
-        )
+    // Per-server filter storage
+    val serverFiltersJson = preferenceManager.myPrefs.cloudServerFilters ?: "{}"
+    val serverFiltersMap = remember(serverFiltersJson) {
+        try {
+            val type = object : TypeToken<Map<String, Set<String>>>() {}.type
+            gson.fromJson<Map<String, Set<String>>>(serverFiltersJson, type) ?: mutableMapOf()
+        } catch (e: Exception) {
+            mutableMapOf<String, Set<String>>()
+        }
     }
-    var selectedLanguages by remember { mutableStateOf(emptySet<String>()) }
+
+    var selectedCategories by remember(currentServer) {
+        mutableStateOf(serverFiltersMap[currentServer?.url] ?: emptySet())
+    }
 
     var showCategoryDialog by remember { mutableStateOf(false) }
-    var showLanguageDialog by remember { mutableStateOf(false) }
     var showLogDialog by remember { mutableStateOf(false) }
 
-    val serverListFocusRequester = remember { FocusRequester() }
-    val settingsFocusRequester = remember { FocusRequester() }
-    val channelsFocusRequester = remember { FocusRequester() }
     val searchFocusRequester = remember { FocusRequester() }
 
-    val filteredChannels = remember(channels, searchQuery, selectedCategories, selectedLanguages) {
+    val filteredChannels = remember(channels, searchQuery, selectedCategories) {
         channels.filter { channel ->
             val matchesSearch = searchQuery.isEmpty() ||
                 channel.name.contains(searchQuery, ignoreCase = true) ||
@@ -94,9 +102,8 @@ fun CloudMainScreen(
                 channel.language?.contains(searchQuery, ignoreCase = true) == true
 
             val matchesCategory = selectedCategories.isEmpty() || selectedCategories.contains(channel.group)
-            val matchesLanguage = selectedLanguages.isEmpty() || selectedLanguages.contains(channel.language)
 
-            matchesSearch && matchesCategory && matchesLanguage
+            matchesSearch && matchesCategory
         }
     }
 
@@ -115,13 +122,7 @@ fun CloudMainScreen(
 
     LaunchedEffect(currentServer) {
         currentServer?.let { server ->
-            // Reset filters when switching servers
-            selectedCategories = emptySet()
-            selectedLanguages = emptySet()
-            preferenceManager.myPrefs.cloudCategoryFilter = ""
-            preferenceManager.savePreferences()
-
-            channels = emptyList() // Clear previous channels
+            channels = emptyList()
             isLoadingChannels = true
             errorMessage = null
             try {
@@ -132,12 +133,10 @@ fun CloudMainScreen(
                 channels = fetchedChannels
             } catch (e: Exception) {
                 errorMessage = "Failed to fetch channels: ${e.localizedMessage}"
-                Log.e("CloudMainScreen", "Error fetching channels", e)
             } finally {
                 isLoadingChannels = false
             }
 
-            // Autoplay logic if enabled
             if (channels.isNotEmpty()) {
                 if (preferenceManager.myPrefs.cloudAutoplayFirstChannel) {
                     onPlayChannel(channels.first(), channels)
@@ -153,6 +152,8 @@ fun CloudMainScreen(
     BackHandler {
         if (isSearchVisible) {
             isSearchVisible = false
+        } else if (!isSidebarVisible) {
+            isSidebarVisible = true
         } else {
             onNavigate("CloudHome")
         }
@@ -161,234 +162,102 @@ fun CloudMainScreen(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF121212))
+            .background(Color(0xFF0A0A0A))
     ) {
-        // Left Column: Servers
-        Column(
-            modifier = Modifier
-                .width(200.dp)
-                .fillMaxHeight()
-                .background(Color(0xFF1A1A1A))
-                .padding(8.dp)
+        // Collapsible Sidebar (Servers + Settings)
+        AnimatedVisibility(
+            visible = isSidebarVisible,
+            enter = expandHorizontally() + fadeIn(),
+            exit = shrinkHorizontally() + fadeOut()
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
-                Icon(Icons.Default.Dns, contentDescription = null, tint = Color.Cyan, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Servers", style = MaterialTheme.typography.titleMedium, color = Color.White)
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Box(modifier = Modifier.weight(1f)) {
-                if (servers.isEmpty()) {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                } else {
-                    LazyColumn {
-                        items(servers) { server ->
-                            ServerListItem(
-                                server = server,
-                                isSelected = server.url == currentServer?.url,
-                                onSelected = { currentServer = server }
-                            )
-                        }
-                    }
-                }
-            }
-
-            HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
-
-            TextButton(
-                onClick = {
-                    currentServer?.let {
-                        scope.launch {
-                            isLoadingChannels = true
-                            errorMessage = null
-                            try {
-                                val fetchedChannels = repository.fetchChannels(it.url, forceRefresh = true)
-                                if (fetchedChannels.isEmpty()) {
-                                    errorMessage = "No channels found or network error."
-                                }
-                                channels = fetchedChannels
-                            } catch (e: Exception) {
-                                errorMessage = "Failed to fetch channels: ${e.localizedMessage}"
-                            } finally {
-                                isLoadingChannels = false
+            Row(modifier = Modifier.fillMaxHeight()) {
+                // Column 1: Servers
+                Column(
+                    modifier = Modifier
+                        .width(180.dp)
+                        .fillMaxHeight()
+                        .background(Color(0xFF141414))
+                        .padding(4.dp)
+                ) {
+                    Text("Servers", color = Color.Cyan, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
+                    Box(modifier = Modifier.weight(1f)) {
+                        LazyColumn {
+                            items(servers) { server ->
+                                ServerListItem(
+                                    server = server,
+                                    isSelected = server.url == currentServer?.url,
+                                    onSelected = { currentServer = server }
+                                )
                             }
                         }
                     }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Refresh", fontSize = 14.sp)
-            }
-        }
-
-        // Center Column: Settings & Filters
-        Column(
-            modifier = Modifier
-                .width(240.dp)
-                .fillMaxHeight()
-                .background(Color(0xFF222222))
-                .padding(8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
-                Icon(Icons.Default.Settings, contentDescription = null, tint = Color.Cyan, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Settings", style = MaterialTheme.typography.titleMedium, color = Color.White)
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                item {
-                    SettingsToggle(
-                        label = "Autoplay First",
-                        checked = preferenceManager.myPrefs.cloudAutoplayFirstChannel,
-                        onCheckedChange = {
-                            preferenceManager.myPrefs.cloudAutoplayFirstChannel = it
-                            preferenceManager.savePreferences()
-                        }
-                    )
-                }
-                item {
-                    SettingsToggle(
-                        label = "Dark Mode",
-                        checked = preferenceManager.myPrefs.darkMODE,
-                        onCheckedChange = {
-                            preferenceManager.myPrefs.darkMODE = it
-                            preferenceManager.savePreferences()
-                        }
-                    )
-                }
-                item {
-                    SettingsToggle(
-                        label = "Animations",
-                        checked = preferenceManager.myPrefs.cloudAnimationEnabled,
-                        onCheckedChange = {
-                            preferenceManager.myPrefs.cloudAnimationEnabled = it
-                            preferenceManager.savePreferences()
-                        }
-                    )
-                }
-                item {
-                    SettingsToggle(
-                        label = "Focus Glow",
-                        checked = preferenceManager.myPrefs.cloudFocusAnimationEnabled,
-                        onCheckedChange = {
-                            preferenceManager.myPrefs.cloudFocusAnimationEnabled = it
-                            preferenceManager.savePreferences()
-                        }
-                    )
-                }
-                item {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text("Scale", color = Color.White, fontSize = 14.sp)
-                        Slider(
-                            value = preferenceManager.myPrefs.cloudUiScale,
-                            onValueChange = {
-                                preferenceManager.myPrefs.cloudUiScale = it
-                                preferenceManager.savePreferences()
-                            },
-                            valueRange = 0.8f..1.2f,
-                            modifier = Modifier.padding(start = 16.dp)
-                        )
+                    IconButton(onClick = { isSidebarVisible = false }, modifier = Modifier.align(Alignment.End)) {
+                        Icon(Icons.Default.ArrowBackIosNew, "Collapse", tint = Color.Gray, modifier = Modifier.size(16.dp))
                     }
                 }
-                item {
-                    SettingsToggle(
-                        label = "Autoplay Last",
-                        checked = preferenceManager.myPrefs.cloudAutoplayLastChannel,
-                        onCheckedChange = {
-                            preferenceManager.myPrefs.cloudAutoplayLastChannel = it
-                            preferenceManager.savePreferences()
+
+                // Column 2: Settings
+                Column(
+                    modifier = Modifier
+                        .width(200.dp)
+                        .fillMaxHeight()
+                        .background(Color(0xFF1C1C1C))
+                        .padding(4.dp)
+                ) {
+                    Text("Settings", color = Color.Cyan, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
+                    LazyColumn(modifier = Modifier.weight(1f)) {
+                        item {
+                            SettingsToggleCompact("Autoplay First", preferenceManager.myPrefs.cloudAutoplayFirstChannel) {
+                                preferenceManager.myPrefs.cloudAutoplayFirstChannel = it
+                                preferenceManager.savePreferences()
+                            }
                         }
-                    )
-                }
-                item {
-                    SettingsActionItem(
-                        label = "Search Channels",
-                        icon = Icons.Default.Search,
-                        onClick = { isSearchVisible = !isSearchVisible }
-                    )
-                }
-                item {
-                    SettingsActionItem(
-                        label = "Refresh Channels",
-                        icon = Icons.Default.Refresh,
-                        onClick = {
-                            currentServer?.let {
-                                scope.launch {
-                                    isLoadingChannels = true
-                                    errorMessage = null
-                                    try {
+                        item {
+                            SettingsToggleCompact("Autoplay Last", preferenceManager.myPrefs.cloudAutoplayLastChannel) {
+                                preferenceManager.myPrefs.cloudAutoplayLastChannel = it
+                                preferenceManager.savePreferences()
+                            }
+                        }
+                        item {
+                            SettingsActionItemCompact("Search", Icons.Default.Search) { isSearchVisible = !isSearchVisible }
+                        }
+                        item {
+                            SettingsActionItemCompact("Filter", Icons.Default.FilterList) { showCategoryDialog = true }
+                        }
+                        item {
+                            SettingsActionItemCompact("Refresh", Icons.Default.Refresh) {
+                                currentServer?.let {
+                                    scope.launch {
+                                        isLoadingChannels = true
                                         channels = repository.fetchChannels(it.url, forceRefresh = true)
-                                    } catch (e: Exception) {
-                                        errorMessage = "Refresh failed: ${e.localizedMessage}"
-                                    } finally {
                                         isLoadingChannels = false
                                     }
                                 }
                             }
                         }
-                    )
-                }
-                item {
-                    SettingsActionItem(
-                        label = "View Debug Logs",
-                        icon = Icons.Default.BugReport,
-                        onClick = {
-                            showLogDialog = true
+                        item {
+                            SettingsActionItemCompact("Clear Cache", Icons.Default.DeleteSweep) {
+                                repository.clearCache()
+                                Toast.makeText(context, "Cache cleared", Toast.LENGTH_SHORT).show()
+                            }
                         }
-                    )
-                }
-                item {
-                    SettingsActionItem(
-                        label = "Clear Cache",
-                        icon = Icons.Default.DeleteSweep,
-                        onClick = {
-                            repository.clearCache()
-                            Toast.makeText(context, "Cache cleared", Toast.LENGTH_SHORT).show()
+                        item {
+                            SettingsActionItemCompact("Logs", Icons.Default.BugReport) { showLogDialog = true }
                         }
-                    )
-                }
-                item {
-                    SettingsActionItem(
-                        label = "Exit App",
-                        icon = Icons.Default.ExitToApp,
-                        onClick = { (context as? Activity)?.finishAffinity() }
-                    )
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Filters", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
-                }
-
-                item {
-                    val categories = remember(channels) {
-                        channels.mapNotNull { it.group }.distinct().sorted()
+                        item {
+                            SettingsActionItemCompact("Reset UI", Icons.Default.RestartAlt) {
+                                preferenceManager.myPrefs.cloudUiScale = 1.0f
+                                preferenceManager.myPrefs.cloudAnimationEnabled = true
+                                preferenceManager.myPrefs.cloudFocusAnimationEnabled = true
+                                preferenceManager.myPrefs.cloudServerFilters = "{}"
+                                preferenceManager.savePreferences()
+                                onNavigate("CloudHome")
+                            }
+                        }
+                        item {
+                            SettingsActionItemCompact("Exit", Icons.Default.ExitToApp) { (context as? Activity)?.finishAffinity() }
+                        }
                     }
-                    SettingsActionItem(
-                        label = if (selectedCategories.isEmpty()) "All Categories" else "${selectedCategories.size} Categories",
-                        icon = Icons.Default.FilterList,
-                        onClick = { showCategoryDialog = true }
-                    )
-                }
-
-                item {
-                    val languages = remember(channels) {
-                        channels.mapNotNull { it.language }.distinct().sorted()
-                    }
-                    SettingsActionItem(
-                        label = if (selectedLanguages.isEmpty()) "All Languages" else "${selectedLanguages.size} Languages",
-                        icon = Icons.Default.Language,
-                        onClick = { showLanguageDialog = true }
-                    )
                 }
             }
         }
@@ -401,52 +270,46 @@ fun CloudMainScreen(
         ) {
             Column(
                 modifier = Modifier
-                    .width(260.dp)
+                    .width(220.dp)
                     .fillMaxHeight()
-                    .background(Color(0xFF2A2A2A))
+                    .background(Color(0xFF222222))
                     .padding(8.dp)
             ) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    label = { Text("Search Channels") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(searchFocusRequester),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color.Cyan,
-                        unfocusedBorderColor = Color.Gray
-                    ),
+                    label = { Text("Search") },
+                    modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Cyan),
                     singleLine = true
                 )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Result count or quick tips
-                Text(
-                    text = "Found ${filteredChannels.size} channels",
-                    color = Color.Gray,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(8.dp)
-                )
+                Text("Found ${filteredChannels.size}", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
             }
         }
 
-        // Right Column: Channels
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .padding(8.dp)
-        ) {
-            Text(
-                text = currentServer?.name ?: "Channels",
-                style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
-                modifier = Modifier.padding(8.dp)
-            )
+        // Main Channel Grid
+        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
+                if (!isSidebarVisible) {
+                    IconButton(onClick = { isSidebarVisible = true }) {
+                        Icon(Icons.Default.Menu, "Expand", tint = Color.Cyan)
+                    }
+                }
+                Text(
+                    text = currentServer?.name ?: "Channels",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+                if (selectedCategories.isNotEmpty()) {
+                    Text(
+                        text = "(${selectedCategories.size} filters)",
+                        color = Color.Cyan,
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable { showCategoryDialog = true }
+                    )
+                }
+            }
 
             if (isLoadingChannels) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -455,36 +318,20 @@ fun CloudMainScreen(
             } else if (errorMessage != null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Error, contentDescription = null, tint = Color.Red, modifier = Modifier.size(48.dp))
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(text = errorMessage!!, color = Color.White, textAlign = TextAlign.Center)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = {
-                            currentServer?.let {
-                                scope.launch {
-                                    isLoadingChannels = true
-                                    errorMessage = null
-                                    channels = repository.fetchChannels(it.url, forceRefresh = true)
-                                    isLoadingChannels = false
-                                }
-                            }
-                        }) {
-                            Text("Retry")
-                        }
+                        Text(text = errorMessage!!, color = Color.White)
+                        Button(onClick = { onNavigate("CloudHome") }) { Text("Retry") }
                     }
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 140.dp),
+                    columns = GridCells.Adaptive(minSize = 110.dp),
                     contentPadding = PaddingValues(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(filteredChannels) { channel ->
-                        ChannelGridItem(
+                        ChannelGridItemCompact(
                             channel = channel,
-                            uiScale = preferenceManager.myPrefs.cloudUiScale,
-                            focusAnimationEnabled = preferenceManager.myPrefs.cloudFocusAnimationEnabled,
                             onSelected = { onPlayChannel(channel, channels) }
                         )
                     }
@@ -498,31 +345,19 @@ fun CloudMainScreen(
             channels.mapNotNull { it.group }.distinct().sorted()
         }
         MultiSelectFilterDialog(
-            title = "Filter by Category",
+            title = "Categories",
             options = categories,
             selectedOptions = selectedCategories,
             onDismiss = { showCategoryDialog = false },
             onConfirm = {
                 selectedCategories = it
-                preferenceManager.myPrefs.cloudCategoryFilter = it.joinToString(",")
+                val newMap = serverFiltersMap.toMutableMap()
+                if (currentServer != null) {
+                    newMap[currentServer!!.url] = it
+                }
+                preferenceManager.myPrefs.cloudServerFilters = gson.toJson(newMap)
                 preferenceManager.savePreferences()
                 showCategoryDialog = false
-            }
-        )
-    }
-
-    if (showLanguageDialog) {
-        val languages = remember(channels) {
-            channels.mapNotNull { it.language }.distinct().sorted()
-        }
-        MultiSelectFilterDialog(
-            title = "Filter by Language",
-            options = languages,
-            selectedOptions = selectedLanguages,
-            onDismiss = { showLanguageDialog = false },
-            onConfirm = {
-                selectedLanguages = it
-                showLanguageDialog = false
             }
         )
     }
@@ -618,175 +453,61 @@ fun ServerListItem(
 }
 
 @Composable
-fun SettingsToggle(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
+fun SettingsToggleCompact(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
-    var localChecked by remember(checked) { mutableStateOf(checked) }
-
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .clickable {
-                val newValue = !localChecked
-                localChecked = newValue
-                onCheckedChange(newValue)
-            }
-            .padding(8.dp)
-            .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(8.dp))
-            .padding(8.dp)
+        modifier = Modifier.fillMaxWidth().onFocusChanged { isFocused = it.isFocused }.focusable()
+            .clickable { onCheckedChange(!checked) }.padding(horizontal = 8.dp, vertical = 4.dp)
+            .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(4.dp))
+            .padding(4.dp)
     ) {
-        Text(label, color = Color.White, modifier = Modifier.weight(1f), fontSize = 14.sp)
-        Switch(
-            checked = localChecked,
-            onCheckedChange = {
-                localChecked = it
-                onCheckedChange(it)
-            },
-            colors = SwitchDefaults.colors(checkedThumbColor = Color.Cyan)
-        )
+        Text(label, color = if (isFocused) Color.Cyan else Color.White, modifier = Modifier.weight(1f), fontSize = 12.sp)
+        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = Color.Cyan), modifier = Modifier.scale(0.7f))
     }
 }
 
 @Composable
-fun SettingsActionItem(
-    label: String,
-    icon: ImageVector,
-    onClick: () -> Unit
-) {
+fun SettingsActionItemCompact(label: String, icon: ImageVector, onClick: () -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
-
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .clickable { onClick() }
+        modifier = Modifier.fillMaxWidth().onFocusChanged { isFocused = it.isFocused }.focusable()
+            .clickable { onClick() }.padding(horizontal = 8.dp, vertical = 4.dp)
+            .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(4.dp))
             .padding(8.dp)
-            .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(8.dp))
-            .padding(12.dp)
     ) {
-        Icon(icon, contentDescription = null, tint = if (isFocused) Color.Cyan else Color.White, modifier = Modifier.size(18.dp))
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(label, color = if (isFocused) Color.Cyan else Color.White, fontSize = 14.sp)
+        Icon(icon, null, tint = if (isFocused) Color.Cyan else Color.White, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(label, color = if (isFocused) Color.Cyan else Color.White, fontSize = 12.sp)
     }
 }
 
 @Composable
-fun FilterSelector(
-    label: String,
-    current: String,
-    options: List<String>,
-    onSelected: (String) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
+fun ChannelGridItemCompact(channel: CloudChannel, onSelected: () -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
-
-    Box(modifier = Modifier.padding(8.dp)) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { isFocused = it.isFocused }
-                .focusable()
-                .clickable { expanded = true }
-                .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(8.dp))
-                .padding(8.dp)
-        ) {
-            Text(label, color = Color.Gray, fontSize = 12.sp)
-            Text(current, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.background(Color(0xFF333333))
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option, color = Color.White) },
-                    onClick = {
-                        onSelected(option)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun ChannelGridItem(
-    channel: CloudChannel,
-    uiScale: Float = 1.0f,
-    focusAnimationEnabled: Boolean = true,
-    onSelected: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (isFocused && focusAnimationEnabled) 1.05f * uiScale else 1.0f * uiScale)
+    val scale by animateFloatAsState(if (isFocused) 1.08f else 1.0f)
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .width(140.dp)
-            .scale(scale)
-            .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
-            .clickable { onSelected() }
+        modifier = Modifier.width(110.dp).scale(scale).onFocusChanged { isFocused = it.isFocused }.focusable().clickable { onSelected() }
             .onPreviewKeyEvent {
-                if (it.nativeKeyEvent.action == KeyEvent.ACTION_UP &&
-                    (it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER ||
-                     it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER)) {
-                    onSelected()
-                    true
+                if (it.nativeKeyEvent.action == KeyEvent.ACTION_UP && (it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER || it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER)) {
+                    onSelected(); true
                 } else false
             }
     ) {
         Box(
-            modifier = Modifier
-                .aspectRatio(16f/9f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.DarkGray)
-                .border(
-                    width = 2.dp,
-                    color = if (isFocused) Color.Cyan else Color.Transparent,
-                    shape = RoundedCornerShape(12.dp)
-                )
+            modifier = Modifier.aspectRatio(16f/9f).clip(RoundedCornerShape(8.dp)).background(Color.DarkGray)
+                .border(width = 2.dp, color = if (isFocused) Color.Cyan else Color.Transparent, shape = RoundedCornerShape(8.dp))
         ) {
-            AsyncImage(
-                model = channel.logo,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize().padding(8.dp)
-            )
-
-            // HD Badge (Dummy check for now, can be improved)
-            if (channel.name.contains("HD", ignoreCase = true)) {
-                Surface(
-                    color = Color.Red,
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
-                ) {
-                    Text("HD", color = Color.White, fontSize = 8.sp, modifier = Modifier.padding(horizontal = 4.dp))
+            AsyncImage(model = channel.logo, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(4.dp))
+            if (channel.name.contains("HD", true)) {
+                Surface(color = Color.Red, shape = RoundedCornerShape(2.dp), modifier = Modifier.align(Alignment.TopEnd).padding(2.dp)) {
+                    Text("HD", color = Color.White, fontSize = 6.sp, modifier = Modifier.padding(horizontal = 2.dp))
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = channel.name,
-            color = if (isFocused) Color.Cyan else Color.White,
-            fontSize = 12.sp,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            lineHeight = 14.sp
-        )
+        Text(text = channel.name, color = if (isFocused) Color.Cyan else Color.White, fontSize = 10.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 11.sp, modifier = Modifier.padding(top = 2.dp))
     }
 }

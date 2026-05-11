@@ -216,6 +216,7 @@ class SkySharedPref(context: Context) {
         @SharedPrefKey("last_cloud_server_name") var lastCloudServerName: String? = null,
         @SharedPrefKey("last_cloud_played_id") var lastCloudPlayedChannelId: String? = null,
         @SharedPrefKey("cloud_category_filter") var cloudCategoryFilter: String? = null,
+        @SharedPrefKey("cloud_server_filters") var cloudServerFilters: String? = "{}",
         @SharedPrefKey("cloud_ui_scale") var cloudUiScale: Float = 1.0f,
         @SharedPrefKey("cloud_animation_enabled") var cloudAnimationEnabled: Boolean = true,
         @SharedPrefKey("cloud_focus_anim_enabled") var cloudFocusAnimationEnabled: Boolean = true,
