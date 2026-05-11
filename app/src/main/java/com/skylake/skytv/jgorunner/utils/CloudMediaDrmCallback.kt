@@ -45,21 +45,27 @@ class CloudMediaDrmCallback(
         }
 
         val okRequest = builder.build()
-        LogCollector.log("DRM Request: $licenseUrl")
+        LogCollector.log("DRM Request: POST $licenseUrl")
+        LogCollector.log("DRM Request Headers: ${okRequest.headers.names().joinToString(", ")}")
 
         return httpClient.newCall(okRequest).execute().use { response ->
             val responseBodyBytes = response.body?.bytes() ?: throw Exception("Empty license response")
 
+            val bodyString = if (responseBodyBytes.isNotEmpty()) {
+                val preview = responseBodyBytes.take(512).toByteArray()
+                String(preview).filter { it.isLetterOrDigit() || it.isWhitespace() || it == '{' || it == '}' || it == '"' || it == ':' || it == ',' }
+            } else "null"
+
             if (!response.isSuccessful) {
-                val bodyString = if (responseBodyBytes.isNotEmpty()) {
-                    val preview = responseBodyBytes.take(256).toByteArray()
-                    String(preview).filter { it.isLetterOrDigit() || it.isWhitespace() }
-                } else "null"
                 LogCollector.log("DRM Error ${response.code}: $bodyString")
                 throw Exception("License server error: ${response.code}")
             }
 
-            LogCollector.log("DRM Success: ${responseBodyBytes.size} bytes")
+            if (responseBodyBytes.size < 1000) {
+                LogCollector.log("DRM Response Content (${responseBodyBytes.size} bytes): $bodyString")
+            } else {
+                LogCollector.log("DRM Success: ${responseBodyBytes.size} bytes")
+            }
             responseBodyBytes
         }
     }
