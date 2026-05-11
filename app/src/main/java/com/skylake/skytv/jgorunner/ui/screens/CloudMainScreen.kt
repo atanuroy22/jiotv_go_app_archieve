@@ -115,12 +115,13 @@ fun CloudMainScreen(
 
     LaunchedEffect(currentServer) {
         currentServer?.let { server ->
+            channels = emptyList() // Clear previous channels
             isLoadingChannels = true
             errorMessage = null
             try {
                 val fetchedChannels = repository.fetchChannels(server.url)
                 if (fetchedChannels.isEmpty()) {
-                    errorMessage = "No channels found or network error."
+                    errorMessage = "No channels found on this server."
                 }
                 channels = fetchedChannels
             } catch (e: Exception) {
