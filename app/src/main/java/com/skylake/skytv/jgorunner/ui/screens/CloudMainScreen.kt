@@ -115,6 +115,12 @@ fun CloudMainScreen(
 
     LaunchedEffect(currentServer) {
         currentServer?.let { server ->
+            // Reset filters when switching servers
+            selectedCategories = emptySet()
+            selectedLanguages = emptySet()
+            preferenceManager.myPrefs.cloudCategoryFilter = ""
+            preferenceManager.savePreferences()
+
             channels = emptyList() // Clear previous channels
             isLoadingChannels = true
             errorMessage = null
