@@ -40,22 +40,28 @@ class CloudMediaDrmCallback(
             licenseUrl = defaultLicenseUrl
         }
 
+        // Check if the request data is JSON (ClearKey often uses JSON challenges)
+        val requestData = request.data
+        val contentType = if (requestData.isNotEmpty() && requestData[0].toInt().toChar() == '{') {
+            "application/json"
+        } else {
+            "application/octet-stream"
+        }
+
         val builder = Request.Builder()
             .url(licenseUrl)
-            .post(request.data.toRequestBody("application/octet-stream".toMediaType()))
+            .post(requestData.toRequestBody(contentType.toMediaType()))
 
-        // Prioritize our custom headers
         headers.forEach { (k, v) ->
             builder.header(k, v)
         }
 
-        // Ensure some basics if missing
         if (!headers.containsKey("Content-Type")) {
-            builder.header("Content-Type", "application/octet-stream")
+            builder.header("Content-Type", contentType)
         }
 
         val okRequest = builder.build()
-        LogCollector.log("DRM Key Request: POST $licenseUrl")
+        LogCollector.log("DRM Key Request: POST $licenseUrl (Type: $contentType)")
 
         return httpClient.newCall(okRequest).execute().use { response ->
             val responseBodyBytes = response.body?.bytes() ?: throw Exception("Empty license response")
@@ -72,12 +78,10 @@ class CloudMediaDrmCallback(
 
             LogCollector.log("DRM Resp size=${responseBodyBytes.size}, hex8=$hexPreview")
 
-            // If it looks like JSON or Text (starts with { or < or is very short), log it
-            if (responseBodyBytes.size < 1000) {
+            // If it's a ClearKey JSON response, Media3 expects it exactly as is
+            if (responseBodyBytes.isNotEmpty() && responseBodyBytes[0].toInt().toChar() == '{') {
                 val bodyText = String(responseBodyBytes).filter { it.code in 32..126 || it == '\n' }
-                if (bodyText.contains("{") || bodyText.contains("<") || bodyText.contains("error")) {
-                    LogCollector.log("DRM Potential Error Body: $bodyText")
-                }
+                LogCollector.log("DRM JSON Body: $bodyText")
             }
 
             responseBodyBytes
