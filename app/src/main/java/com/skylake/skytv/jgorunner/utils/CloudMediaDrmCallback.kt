@@ -18,21 +18,25 @@ class CloudMediaDrmCallback(
 ) : MediaDrmCallback {
 
     override fun executeProvisionRequest(uuid: UUID, request: ProvisionRequest): ByteArray {
-        val url = "${request.defaultUrl}&signedRequest=${String(request.data)}"
+        val url = request.defaultUrl
         val okRequest = Request.Builder()
             .url(url)
-            .post(ByteArray(0).toRequestBody())
+            .post(request.data.toRequestBody("application/octet-stream".toMediaType()))
             .build()
 
+        LogCollector.log("DRM Provision Request: $url")
         return httpClient.newCall(okRequest).execute().use { response ->
-            if (!response.isSuccessful) throw Exception("Provisioning failed: ${response.code}")
+            if (!response.isSuccessful) {
+                LogCollector.log("DRM Provision Error ${response.code}")
+                throw Exception("Provisioning failed: ${response.code}")
+            }
             response.body?.bytes() ?: throw Exception("Empty provisioning response")
         }
     }
 
     override fun executeKeyRequest(uuid: UUID, request: KeyRequest): ByteArray {
         var licenseUrl = request.licenseServerUrl
-        if (licenseUrl.isNullOrEmpty()) {
+        if (licenseUrl.isNullOrEmpty() || licenseUrl.contains("provisioning.widevine.com")) {
             licenseUrl = defaultLicenseUrl
         }
 
@@ -40,40 +44,42 @@ class CloudMediaDrmCallback(
             .url(licenseUrl)
             .post(request.data.toRequestBody("application/octet-stream".toMediaType()))
 
+        // Prioritize our custom headers
         headers.forEach { (k, v) ->
             builder.header(k, v)
         }
 
+        // Ensure some basics if missing
+        if (!headers.containsKey("Content-Type")) {
+            builder.header("Content-Type", "application/octet-stream")
+        }
+
         val okRequest = builder.build()
-        LogCollector.log("DRM Request: POST $licenseUrl")
-        LogCollector.log("DRM Request Headers: ${okRequest.headers.names().joinToString(", ")}")
+        LogCollector.log("DRM Key Request: POST $licenseUrl")
 
         return httpClient.newCall(okRequest).execute().use { response ->
             val responseBodyBytes = response.body?.bytes() ?: throw Exception("Empty license response")
-
-            LogCollector.log("DRM Response Headers: ${response.headers.names().joinToString(", ")}")
-
-            val bodyString = if (responseBodyBytes.isNotEmpty()) {
-                val preview = responseBodyBytes.take(2048).toByteArray()
-                // More permissive filter to see potential JSON/HTML/Text errors
-                String(preview).filter { it.code in 32..126 || it == '\n' || it == '\r' || it == '\t' }
-            } else "null"
 
             val hexPreview = if (responseBodyBytes.size >= 8) {
                 responseBodyBytes.take(8).joinToString("") { "%02x".format(it) }
             } else "too-short"
 
             if (!response.isSuccessful) {
-                LogCollector.log("DRM Error ${response.code}: $bodyString")
+                val errBody = String(responseBodyBytes.take(1024).toByteArray()).filter { it.code in 32..126 }
+                LogCollector.log("DRM Error ${response.code}: $errBody")
                 throw Exception("License server error: ${response.code}")
             }
 
             LogCollector.log("DRM Resp size=${responseBodyBytes.size}, hex8=$hexPreview")
+
+            // If it looks like JSON or Text (starts with { or < or is very short), log it
             if (responseBodyBytes.size < 1000) {
-                LogCollector.log("DRM Response Content: $bodyString")
-            } else {
-                LogCollector.log("DRM Success (binary)")
+                val bodyText = String(responseBodyBytes).filter { it.code in 32..126 || it == '\n' }
+                if (bodyText.contains("{") || bodyText.contains("<") || bodyText.contains("error")) {
+                    LogCollector.log("DRM Potential Error Body: $bodyText")
+                }
             }
+
             responseBodyBytes
         }
     }
