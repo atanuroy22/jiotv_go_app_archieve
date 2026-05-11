@@ -13,9 +13,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -98,6 +96,7 @@ fun CloudPlayerScreen(
 
     val focusRequester = remember { FocusRequester() }
     var showChannelPanel by remember { mutableStateOf(false) }
+    var showSettingsPanel by remember { mutableStateOf(false) }
     var panelSelectedIndex by remember { mutableIntStateOf(currentIndex) }
     var showChannelOverlay by remember { mutableStateOf(false) }
     var overlayVisibilityTick by remember { mutableLongStateOf(0L) }
@@ -209,7 +208,6 @@ fun CloudPlayerScreen(
             if (!ch.licenseUrl.isNullOrBlank()) {
                 LogCollector.log("Configuring DRM: ${ch.licenseUrl}")
 
-                // Detection for ClearKey vs Widevine
                 val isClearKey = ch.licenseUrl.contains("plkey.php", true) ||
                                 ch.licenseUrl.contains("key.php", true) ||
                                 ch.licenseUrl.contains("clearkey", true) ||
@@ -225,7 +223,7 @@ fun CloudPlayerScreen(
                         .build()
                 )
 
-                val drmCallback = CloudMediaDrmCallback(ch.licenseUrl, normalizedHeaders, okHttpClient)
+                val drmCallback = CloudMediaDrmCallback(ch.licenseUrl!!, normalizedHeaders, okHttpClient)
                 val drmSessionManager = DefaultDrmSessionManager.Builder()
                     .setMultiSession(true)
                     .setUuidAndExoMediaDrmProvider(drmUuid, FrameworkMediaDrm.DEFAULT_PROVIDER)
@@ -258,7 +256,7 @@ fun CloudPlayerScreen(
     LaunchedEffect(overlayVisibilityTick) {
         if (overlayVisibilityTick > 0L) {
             delay(5000)
-            if (!showChannelPanel) {
+            if (!showChannelPanel && !showSettingsPanel) {
                 showChannelOverlay = false
             }
         }
@@ -274,6 +272,8 @@ fun CloudPlayerScreen(
     BackHandler {
         if (showChannelPanel) {
             showChannelPanel = false
+        } else if (showSettingsPanel) {
+            showSettingsPanel = false
         } else {
             (context as? Activity)?.finish()
         }
@@ -297,44 +297,28 @@ fun CloudPlayerScreen(
 
                 when (event.key) {
                     Key.DirectionLeft -> {
-                        if (!showChannelPanel) {
+                        if (!showChannelPanel && !showSettingsPanel) {
                             panelSelectedIndex = currentIndex
                             showChannelPanel = true
                             return@onPreviewKeyEvent true
                         }
                     }
                     Key.DirectionUp -> {
-                        if (showChannelPanel) {
-                            panelSelectedIndex = (panelSelectedIndex - 1 + cloudChannelList.size) % cloudChannelList.size
-                            return@onPreviewKeyEvent true
-                        } else {
+                        if (!showChannelPanel && !showSettingsPanel) {
                             currentIndex = (currentIndex - 1 + cloudChannelList.size) % cloudChannelList.size
                             return@onPreviewKeyEvent true
                         }
                     }
                     Key.DirectionDown -> {
-                        if (showChannelPanel) {
-                            panelSelectedIndex = (panelSelectedIndex + 1) % cloudChannelList.size
-                            return@onPreviewKeyEvent true
-                        } else {
+                        if (!showChannelPanel && !showSettingsPanel) {
                             currentIndex = (currentIndex + 1) % cloudChannelList.size
                             return@onPreviewKeyEvent true
                         }
                     }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                        if (showChannelPanel) {
-                            currentIndex = panelSelectedIndex
-                            showChannelPanel = false
-                            return@onPreviewKeyEvent true
-                        } else {
+                        if (!showChannelPanel && !showSettingsPanel) {
                             showChannelOverlay = true
                             overlayVisibilityTick = System.currentTimeMillis()
-                        }
-                    }
-                    Key.Back -> {
-                        if (showChannelPanel) {
-                            showChannelPanel = false
-                            return@onPreviewKeyEvent true
                         }
                     }
                 }
@@ -376,26 +360,15 @@ fun CloudPlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        if (showChannelOverlay) {
+        // Overlay UI
+        if (showChannelOverlay && !showChannelPanel && !showSettingsPanel) {
             CloudPlayerOverlay(
                 channel = activeCloudChannel,
                 currentIndex = currentIndex,
-                onMenuClick = { showChannelPanel = true },
-                onHomeClick = {
-                    val intent = Intent(context, MainActivity::class.java).apply {
-                        putExtra("target_screen", "CloudHome")
-                        addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                    }
-                    context.startActivity(intent)
-                    (context as? Activity)?.finish()
-                },
-                onDashboardClick = {
-                    val intent = Intent(context, MainActivity::class.java).apply {
-                        putExtra("target_screen", "CloudMain")
-                        addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                    }
-                    context.startActivity(intent)
-                    (context as? Activity)?.finish()
+                onMenuClick = { showSettingsPanel = true },
+                onChannelsClick = {
+                    panelSelectedIndex = currentIndex
+                    showChannelPanel = true
                 },
                 onRefreshClick = {
                     val current = currentIndex
@@ -405,14 +378,33 @@ fun CloudPlayerScreen(
             )
         }
 
-        if (showChannelPanel) {
+        // Side Panels
+        AnimatedVisibility(
+            visible = showChannelPanel,
+            enter = slideInHorizontally { -it },
+            exit = slideOutHorizontally { -it }
+        ) {
             CloudSidePanel(
                 channels = cloudChannelList,
                 selectedIndex = panelSelectedIndex,
                 onChannelSelected = {
                     currentIndex = it
                     showChannelPanel = false
-                }
+                },
+                onClose = { showChannelPanel = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = showSettingsPanel,
+            enter = slideInHorizontally { it },
+            exit = slideOutHorizontally { it },
+            modifier = Modifier.align(Alignment.CenterEnd)
+        ) {
+            CloudSettingsPanel(
+                preferenceManager = preferenceManager,
+                onClose = { showSettingsPanel = false },
+                onLogClick = { /* Handled via showPlayerLogDialog logic if needed */ }
             )
         }
 
@@ -472,38 +464,43 @@ fun CloudPlayerOverlay(
     channel: CloudChannel?,
     currentIndex: Int,
     onMenuClick: () -> Unit,
-    onHomeClick: () -> Unit,
-    onDashboardClick: () -> Unit,
+    onChannelsClick: () -> Unit,
     onRefreshClick: () -> Unit
 ) {
-    Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Card(
-            modifier = Modifier.align(Alignment.TopStart),
-            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.6f)),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Box(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        Column(modifier = Modifier.align(Alignment.BottomStart)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 AsyncImage(
                     model = channel?.logo,
                     contentDescription = null,
-                    modifier = Modifier.size(50.dp).clip(RoundedCornerShape(8.dp))
+                    modifier = Modifier.size(60.dp).clip(RoundedCornerShape(8.dp))
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(16.dp))
                 Column {
-                    Text(text = "${currentIndex + 1}. ${channel?.name ?: "Unknown"}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    Text(text = channel?.group ?: "", color = Color.Gray, fontSize = 14.sp)
+                    Text(text = "${currentIndex + 1}. ${channel?.name ?: "Unknown"}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                    Text(text = channel?.group ?: "", color = Color.Cyan.copy(alpha = 0.7f), fontSize = 16.sp)
                 }
-                Spacer(modifier = Modifier.width(24.dp))
-                IconButton(onClick = onMenuClick) { Icon(Icons.Default.Menu, null, tint = Color.White) }
-                IconButton(onClick = onHomeClick) { Icon(Icons.Default.Home, null, tint = Color.White) }
-                IconButton(onClick = onDashboardClick) { Icon(Icons.Default.Dashboard, null, tint = Color.White) }
-                IconButton(onClick = onRefreshClick) { Icon(Icons.Default.Refresh, null, tint = Color.White) }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Row {
+                IconButton(onClick = onChannelsClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))) {
+                    Icon(Icons.Default.List, null, tint = Color.White)
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                IconButton(onClick = onMenuClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))) {
+                    Icon(Icons.Default.Settings, null, tint = Color.White)
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                IconButton(onClick = onRefreshClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))) {
+                    Icon(Icons.Default.Refresh, null, tint = Color.White)
+                }
             }
         }
 
         Card(
             modifier = Modifier.align(Alignment.TopEnd),
-            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.6f))
+            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(8.dp)
         ) {
             var time by remember { mutableStateOf("") }
             LaunchedEffect(Unit) {
@@ -513,7 +510,7 @@ fun CloudPlayerOverlay(
                     delay(30000)
                 }
             }
-            Text(text = time, color = Color.White, modifier = Modifier.padding(8.dp), fontWeight = FontWeight.Bold)
+            Text(text = time, color = Color.White, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
     }
 }
@@ -522,26 +519,62 @@ fun CloudPlayerOverlay(
 fun CloudSidePanel(
     channels: List<CloudChannel>,
     selectedIndex: Int,
-    onChannelSelected: (Int) -> Unit
+    onChannelSelected: (Int) -> Unit,
+    onClose: () -> Unit
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(selectedIndex) { listState.animateScrollToItem(selectedIndex) }
+    LaunchedEffect(selectedIndex) { listState.scrollToItem(selectedIndex) }
 
-    Box(modifier = Modifier.fillMaxHeight().width(300.dp).background(Color.Black.copy(alpha = 0.8f))) {
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-            itemsIndexed(channels) { index, channel ->
-                val isSelected = index == selectedIndex
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(if (isSelected) Color.Cyan.copy(alpha = 0.3f) else Color.Transparent)
-                        .clickable { onChannelSelected(index) }
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    AsyncImage(model = channel.logo, contentDescription = null, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)))
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(text = channel.name, color = Color.White, maxLines = 1)
+    Box(modifier = Modifier.fillMaxHeight().width(320.dp).background(Color.Black.copy(alpha = 0.85f)).padding(16.dp)) {
+        Column {
+            Text("Channels", color = Color.Cyan, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
+            LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
+                itemsIndexed(channels) { index, channel ->
+                    val isSelected = index == selectedIndex
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) Color.Cyan.copy(alpha = 0.2f) else Color.Transparent)
+                            .clickable { onChannelSelected(index) }
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AsyncImage(model = channel.logo, contentDescription = null, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(text = channel.name, color = if (isSelected) Color.Cyan else Color.White, maxLines = 1, fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CloudSettingsPanel(
+    preferenceManager: SkySharedPref,
+    onClose: () -> Unit,
+    onLogClick: () -> Unit
+) {
+    Box(modifier = Modifier.fillMaxHeight().width(280.dp).background(Color.Black.copy(alpha = 0.85f)).padding(16.dp)) {
+        Column {
+            Text("Player Settings", color = Color.Cyan, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
+
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                item {
+                    SettingsToggleCompact("Autoplay Next", true) { /* Logic */ }
+                }
+                item {
+                    SettingsToggleCompact("Show Stats", false) { /* Logic */ }
+                }
+                item {
+                    SettingsActionItemCompact("Aspect Ratio", Icons.Default.AspectRatio) { /* Logic */ }
+                }
+                item {
+                    SettingsActionItemCompact("Playback Logs", Icons.Default.BugReport) { onLogClick() }
+                }
+                item {
+                    SettingsActionItemCompact("Close Menu", Icons.Default.Close) { onClose() }
                 }
             }
         }
