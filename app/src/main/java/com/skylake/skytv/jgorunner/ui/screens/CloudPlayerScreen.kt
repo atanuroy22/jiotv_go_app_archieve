@@ -211,6 +211,7 @@ fun CloudPlayerScreen(
 
                 // Detection for ClearKey vs Widevine
                 val isClearKey = ch.licenseUrl.contains("plkey.php", true) ||
+                                ch.licenseUrl.contains("key.php", true) ||
                                 ch.licenseUrl.contains("clearkey", true) ||
                                 ch.type?.contains("clearkey", true) == true
 

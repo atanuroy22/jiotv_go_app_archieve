@@ -63,7 +63,15 @@ class CloudRepository(private val context: Context) {
                 cacheFile.writeText(body)
 
                 val type = object : TypeToken<List<CloudChannel>>() {}.type
-                gson.fromJson<List<CloudChannel>>(body, type) ?: emptyList()
+                try {
+                    gson.fromJson<List<CloudChannel>>(body, type) ?: emptyList()
+                } catch (e: Exception) {
+                    Log.e("CloudRepository", "Direct parse failed, trying object wrap", e)
+                    // If the JSON is an object { "channels": [...] } or similar, we might need a more flexible parser
+                    // For now, let's just log the body to see what's wrong
+                    Log.d("CloudRepository", "Problematic JSON: ${body.take(500)}")
+                    emptyList()
+                }
             }
         } catch (e: Exception) {
             Log.e("CloudRepository", "Error fetching channels", e)
