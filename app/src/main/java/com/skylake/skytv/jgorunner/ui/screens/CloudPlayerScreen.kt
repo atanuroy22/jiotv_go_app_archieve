@@ -107,15 +107,10 @@ fun CloudPlayerScreen(
     var showNumericOverlay by remember { mutableStateOf(false) }
     var numericJob by remember { mutableStateOf<Job?>(null) }
 
-    val headerState = remember { mutableStateOf<Map<String, String>?>(null) }
-    val userAgentState = remember { mutableStateOf<String?>(null) }
-
-    val dynamicHeaders = remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-
     val okHttpClient = remember {
         OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
@@ -126,15 +121,14 @@ fun CloudPlayerScreen(
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
                         LogCollector.logError("CloudPlayer Error: ${error.errorCodeName} - ${error.message}", error)
-                        playerError = error.errorCodeName
+                        playerError = "${error.errorCodeName}\n${error.message}"
 
-                        // Auto-retry logic
-                        if (retryCountRef.value < 5) {
+                        if (retryCountRef.value < 3) {
                             retryCountRef.value++
                             Handler(Looper.getMainLooper()).postDelayed({
                                 prepare()
                                 play()
-                            }, 2000)
+                            }, 3000)
                         }
                     }
 
@@ -150,63 +144,59 @@ fun CloudPlayerScreen(
 
     LaunchedEffect(currentIndex) {
         val ch = cloudChannelList.getOrNull(currentIndex)
+        if (ch == null) return@LaunchedEffect
+
         activeCloudChannel = ch
 
-        val headers = ch?.headers ?: emptyMap()
-        val rawUA = ch?.userAgent
-        val isJio = ch?.mpdUrl?.contains("jio.com", true) == true ||
-                   ch?.m3u8Url?.contains("jio.com", true) == true ||
-                   ch?.licenseUrl?.contains("webplay.fun", true) == true ||
-                   ch?.licenseUrl?.contains("jio", true) == true
+        val isJio = ch.mpdUrl?.contains("jio.com", true) == true ||
+                   ch.m3u8Url?.contains("jio.com", true) == true ||
+                   ch.licenseUrl?.contains("webplay.fun", true) == true ||
+                   ch.licenseUrl?.contains("jio", true) == true
 
-        val finalUA = if (rawUA == null || rawUA == "@cloudplay" || rawUA.isEmpty()) {
-            if (isJio) "JioTV/Android" else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        } else {
-            rawUA
+        val androidId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "0123456789abcdef"
+
+        val finalUA = when {
+            ch.userAgent != null && ch.userAgent != "@cloudplay" && ch.userAgent.isNotBlank() -> ch.userAgent
+            isJio -> "JioTV/7.0.8 (Linux; Android 11; SM-G998B Build/RP1A.200720.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/122.0.6261.64 Mobile Safari/537.36"
+            else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         }
 
         val normalizedHeaders = mutableMapOf<String, String>()
         normalizedHeaders["User-Agent"] = finalUA
 
         if (isJio) {
-            val androidId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: java.util.UUID.randomUUID().toString()
             normalizedHeaders["os"] = "android"
             normalizedHeaders["devicetype"] = "phone"
             normalizedHeaders["uniqueId"] = androidId
             normalizedHeaders["deviceId"] = androidId
             normalizedHeaders["appname"] = "com.jio.jiotv"
             normalizedHeaders["versionCode"] = "323"
+            normalizedHeaders["X-Jio-Network-Type"] = "WIFI"
             normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
         }
 
-        headers.forEach { (k, v) ->
+        ch.headers?.forEach { (k, v) ->
             val key = when {
                 k.equals("cookie", true) -> "Cookie"
                 k.equals("user-agent", true) -> "User-Agent"
-                k.equals("origin", true) -> "Origin"
-                k.equals("referer", true) -> "Referer"
-                k.equals("x-requested-with", true) -> "X-Requested-With"
-                k.equals("os", true) -> "os"
-                k.equals("devicetype", true) -> "devicetype"
-                k.equals("versioncode", true) -> "versionCode"
                 else -> k
             }
             normalizedHeaders[key] = v
         }
 
-        dynamicHeaders.value = normalizedHeaders
-
         playerError = null
         retryCountRef.value = 0
 
-        val playbackUrl = ch?.mpdUrl ?: ch?.m3u8Url ?: ""
+        val playbackUrl = ch.mpdUrl ?: ch.m3u8Url ?: ""
         if (playbackUrl.isNotBlank()) {
             val normalized = normalizePlaybackUrl(context, playbackUrl)
-            LogCollector.log("Playing Cloud URL: $normalized")
+            LogCollector.log("Preparing Cloud Player: ${ch.name} -> $normalized")
 
-            val builder = MediaItem.Builder().setUri(normalized.toUri())
+            val builder = MediaItem.Builder()
+                .setUri(normalized.toUri())
+                .setMediaId(ch.id ?: "")
 
-            if (normalized.contains(".mpd") || ch?.type == "dash") {
+            if (normalized.contains(".mpd") || ch.type == "dash") {
                 builder.setMimeType(MimeTypes.APPLICATION_MPD)
             } else if (normalized.contains(".m3u8")) {
                 builder.setMimeType(MimeTypes.APPLICATION_M3U8)
@@ -215,16 +205,17 @@ fun CloudPlayerScreen(
             val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             dataSourceFactory.setDefaultRequestProperties(normalizedHeaders)
 
-            ch?.licenseUrl?.let { lic ->
-                LogCollector.log("Setting Cloud DRM: $lic")
+            if (!ch.licenseUrl.isNullOrBlank()) {
+                LogCollector.log("Configuring DRM: ${ch.licenseUrl}")
 
-                val drmHeaders = mutableMapOf<String, String>()
-                drmHeaders.putAll(normalizedHeaders)
+                builder.setDrmConfiguration(
+                    MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
+                        .setLicenseUri(ch.licenseUrl)
+                        .setMultiSession(true)
+                        .build()
+                )
 
-                LogCollector.log("DRM Headers: ${drmHeaders.keys.joinToString(", ")}")
-                LogCollector.log("DRM UA: ${drmHeaders["User-Agent"]}")
-
-                val drmCallback = CloudMediaDrmCallback(lic, drmHeaders, okHttpClient)
+                val drmCallback = CloudMediaDrmCallback(ch.licenseUrl!!, normalizedHeaders, okHttpClient)
                 val drmSessionManager = DefaultDrmSessionManager.Builder()
                     .setMultiSession(true)
                     .setUuidAndExoMediaDrmProvider(C.WIDEVINE_UUID, FrameworkMediaDrm.DEFAULT_PROVIDER)
@@ -241,7 +232,7 @@ fun CloudPlayerScreen(
                         .createMediaSource(mediaItem)
                 }
                 exoPlayer.setMediaSource(mediaSource)
-            } ?: run {
+            } else {
                 exoPlayer.setMediaItem(builder.build())
             }
 
@@ -338,7 +329,6 @@ fun CloudPlayerScreen(
                     }
                 }
 
-                // Numeric entry
                 val digit = when (event.key) {
                     Key.Zero -> 0; Key.One -> 1; Key.Two -> 2; Key.Three -> 3; Key.Four -> 4
                     Key.Five -> 5; Key.Six -> 6; Key.Seven -> 7; Key.Eight -> 8; Key.Nine -> 9
@@ -376,7 +366,6 @@ fun CloudPlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Overlays
         if (showChannelOverlay) {
             CloudPlayerOverlay(
                 channel = activeCloudChannel,
@@ -431,11 +420,12 @@ fun CloudPlayerScreen(
 
         if (playerError != null) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                     Icon(Icons.Default.Error, contentDescription = null, tint = Color.Red, modifier = Modifier.size(48.dp))
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Playback Error", color = Color.White, fontWeight = FontWeight.Bold)
-                    Text(playerError!!, color = Color.Red, fontSize = 14.sp)
+                    Text("Playback Error", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(playerError!!, color = Color.Gray, fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     Spacer(modifier = Modifier.height(24.dp))
                     Row {
                         Button(onClick = {
@@ -449,7 +439,7 @@ fun CloudPlayerScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         Button(
                             onClick = { showPlayerLogDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
                         ) {
                             Text("Show Logs")
                         }
@@ -501,7 +491,6 @@ fun CloudPlayerOverlay(
             }
         }
 
-        // Clock
         Card(
             modifier = Modifier.align(Alignment.TopEnd),
             colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.6f))
