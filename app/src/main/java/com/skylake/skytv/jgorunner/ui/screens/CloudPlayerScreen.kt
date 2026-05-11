@@ -77,6 +77,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.util.Calendar
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 @RequiresApi(Build.VERSION_CODES.O)
@@ -208,17 +209,25 @@ fun CloudPlayerScreen(
             if (!ch.licenseUrl.isNullOrBlank()) {
                 LogCollector.log("Configuring DRM: ${ch.licenseUrl}")
 
+                // Detection for ClearKey vs Widevine
+                val isClearKey = ch.licenseUrl.contains("plkey.php", true) ||
+                                ch.licenseUrl.contains("clearkey", true) ||
+                                ch.type?.contains("clearkey", true) == true
+
+                val drmUuid = if (isClearKey) C.CLEARKEY_UUID else C.WIDEVINE_UUID
+                LogCollector.log("Using DRM UUID: $drmUuid (${if (isClearKey) "ClearKey" else "Widevine"})")
+
                 builder.setDrmConfiguration(
-                    MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
+                    MediaItem.DrmConfiguration.Builder(drmUuid)
                         .setLicenseUri(ch.licenseUrl)
                         .setMultiSession(true)
                         .build()
                 )
 
-                val drmCallback = CloudMediaDrmCallback(ch.licenseUrl!!, normalizedHeaders, okHttpClient)
+                val drmCallback = CloudMediaDrmCallback(ch.licenseUrl, normalizedHeaders, okHttpClient)
                 val drmSessionManager = DefaultDrmSessionManager.Builder()
                     .setMultiSession(true)
-                    .setUuidAndExoMediaDrmProvider(C.WIDEVINE_UUID, FrameworkMediaDrm.DEFAULT_PROVIDER)
+                    .setUuidAndExoMediaDrmProvider(drmUuid, FrameworkMediaDrm.DEFAULT_PROVIDER)
                     .build(drmCallback)
 
                 val mediaItem = builder.build()
