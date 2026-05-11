@@ -50,6 +50,7 @@ import com.skylake.skytv.jgorunner.ui.components.MultiSelectFilterDialog
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import com.skylake.skytv.jgorunner.utils.LogCollector
+import com.skylake.skytv.jgorunner.data.CloudDataManager
 import kotlinx.coroutines.launch
 
 @Composable
@@ -101,7 +102,10 @@ fun CloudMainScreen(
                 channel.group?.contains(searchQuery, ignoreCase = true) == true ||
                 channel.language?.contains(searchQuery, ignoreCase = true) == true
 
-            val matchesCategory = selectedCategories.isEmpty() || selectedCategories.contains(channel.group)
+            val matchesCategory = selectedCategories.isEmpty() || selectedCategories.any { filter ->
+                channel.group?.contains(filter, ignoreCase = true) == true ||
+                channel.language?.contains(filter, ignoreCase = true) == true
+            }
 
             matchesSearch && matchesCategory
         }
@@ -122,6 +126,7 @@ fun CloudMainScreen(
 
     LaunchedEffect(currentServer) {
         currentServer?.let { server ->
+            isSidebarVisible = false // Auto-collapse on server selection
             channels = emptyList()
             isLoadingChannels = true
             errorMessage = null
@@ -174,12 +179,17 @@ fun CloudMainScreen(
                 // Column 1: Servers
                 Column(
                     modifier = Modifier
-                        .width(180.dp)
+                        .width(170.dp)
                         .fillMaxHeight()
                         .background(Color(0xFF141414))
                         .padding(4.dp)
                 ) {
-                    Text("Servers", color = Color.Cyan, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
+                        Text("Servers", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { isSidebarVisible = false }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Close, "Collapse", tint = Color.Red, modifier = Modifier.size(18.dp))
+                        }
+                    }
                     Box(modifier = Modifier.weight(1f)) {
                         LazyColumn {
                             items(servers) { server ->
@@ -191,29 +201,30 @@ fun CloudMainScreen(
                             }
                         }
                     }
-                    IconButton(onClick = { isSidebarVisible = false }, modifier = Modifier.align(Alignment.End)) {
-                        Icon(Icons.Default.ArrowBackIosNew, "Collapse", tint = Color.Gray, modifier = Modifier.size(16.dp))
-                    }
                 }
 
                 // Column 2: Settings
                 Column(
                     modifier = Modifier
-                        .width(200.dp)
+                        .width(180.dp)
                         .fillMaxHeight()
                         .background(Color(0xFF1C1C1C))
                         .padding(4.dp)
                 ) {
-                    Text("Settings", color = Color.Cyan, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
+                    Text("Settings", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
                     LazyColumn(modifier = Modifier.weight(1f)) {
                         item {
-                            SettingsToggleCompact("Autoplay First", preferenceManager.myPrefs.cloudAutoplayFirstChannel) {
+                            var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayFirstChannel) }
+                            SettingsToggleCompact("Autoplay First", checked) {
+                                checked = it
                                 preferenceManager.myPrefs.cloudAutoplayFirstChannel = it
                                 preferenceManager.savePreferences()
                             }
                         }
                         item {
-                            SettingsToggleCompact("Autoplay Last", preferenceManager.myPrefs.cloudAutoplayLastChannel) {
+                            var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayLastChannel) }
+                            SettingsToggleCompact("Autoplay Last", checked) {
+                                checked = it
                                 preferenceManager.myPrefs.cloudAutoplayLastChannel = it
                                 preferenceManager.savePreferences()
                             }
@@ -223,6 +234,17 @@ fun CloudMainScreen(
                         }
                         item {
                             SettingsActionItemCompact("Filter", Icons.Default.FilterList) { showCategoryDialog = true }
+                        }
+                        item {
+                            SettingsActionItemCompact("Clear Filters", Icons.Default.FilterAltOff) {
+                                selectedCategories = emptySet()
+                                val newMap = serverFiltersMap.toMutableMap()
+                                if (currentServer != null) {
+                                    newMap[currentServer!!.url] = emptySet()
+                                }
+                                preferenceManager.myPrefs.cloudServerFilters = gson.toJson(newMap)
+                                preferenceManager.savePreferences()
+                            }
                         }
                         item {
                             SettingsActionItemCompact("Refresh", Icons.Default.Refresh) {
@@ -270,7 +292,7 @@ fun CloudMainScreen(
         ) {
             Column(
                 modifier = Modifier
-                    .width(220.dp)
+                    .width(200.dp)
                     .fillMaxHeight()
                     .background(Color(0xFF222222))
                     .padding(8.dp)
@@ -278,12 +300,19 @@ fun CloudMainScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    label = { Text("Search") },
+                    label = { Text("Search", fontSize = 12.sp) },
                     modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester),
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Cyan),
-                    singleLine = true
+                    singleLine = true,
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, "Clear", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
                 )
-                Text("Found ${filteredChannels.size}", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
+                Text("Found ${filteredChannels.size}", color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(4.dp))
             }
         }
 
@@ -291,8 +320,8 @@ fun CloudMainScreen(
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
                 if (!isSidebarVisible) {
-                    IconButton(onClick = { isSidebarVisible = true }) {
-                        Icon(Icons.Default.Menu, "Expand", tint = Color.Cyan)
+                    IconButton(onClick = { isSidebarVisible = true }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Menu, "Expand", tint = Color.Cyan, modifier = Modifier.size(24.dp))
                     }
                 }
                 Text(
@@ -302,12 +331,18 @@ fun CloudMainScreen(
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
                 if (selectedCategories.isNotEmpty()) {
-                    Text(
-                        text = "(${selectedCategories.size} filters)",
-                        color = Color.Cyan,
-                        fontSize = 12.sp,
+                    Surface(
+                        color = Color.Cyan.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(4.dp),
                         modifier = Modifier.clickable { showCategoryDialog = true }
-                    )
+                    ) {
+                        Text(
+                            text = "${selectedCategories.size} filters",
+                            color = Color.Cyan,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
 
@@ -324,15 +359,19 @@ fun CloudMainScreen(
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 110.dp),
+                    columns = GridCells.Adaptive(minSize = 90.dp),
                     contentPadding = PaddingValues(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(filteredChannels) { channel ->
                         ChannelGridItemCompact(
                             channel = channel,
-                            onSelected = { onPlayChannel(channel, channels) }
+                            onSelected = {
+                                // Store the active filtered list for the player
+                                CloudDataManager.currentChannelList = filteredChannels
+                                onPlayChannel(channel, filteredChannels)
+                            }
                         )
                     }
                 }
@@ -444,7 +483,7 @@ fun ServerListItem(
             Text(
                 text = server.name,
                 color = if (isSelected || isFocused) Color.Cyan else Color.White,
-                fontSize = 14.sp,
+                fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -462,8 +501,8 @@ fun SettingsToggleCompact(label: String, checked: Boolean, onCheckedChange: (Boo
             .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(4.dp))
             .padding(4.dp)
     ) {
-        Text(label, color = if (isFocused) Color.Cyan else Color.White, modifier = Modifier.weight(1f), fontSize = 12.sp)
-        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = Color.Cyan), modifier = Modifier.scale(0.7f))
+        Text(label, color = if (isFocused) Color.Cyan else Color.White, modifier = Modifier.weight(1f), fontSize = 11.sp)
+        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = Color.Cyan), modifier = Modifier.scale(0.6f))
     }
 }
 
@@ -475,11 +514,11 @@ fun SettingsActionItemCompact(label: String, icon: ImageVector, onClick: () -> U
         modifier = Modifier.fillMaxWidth().onFocusChanged { isFocused = it.isFocused }.focusable()
             .clickable { onClick() }.padding(horizontal = 8.dp, vertical = 4.dp)
             .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(4.dp))
-            .padding(8.dp)
+            .padding(6.dp)
     ) {
-        Icon(icon, null, tint = if (isFocused) Color.Cyan else Color.White, modifier = Modifier.size(16.dp))
+        Icon(icon, null, tint = if (isFocused) Color.Cyan else Color.White, modifier = Modifier.size(14.dp))
         Spacer(modifier = Modifier.width(8.dp))
-        Text(label, color = if (isFocused) Color.Cyan else Color.White, fontSize = 12.sp)
+        Text(label, color = if (isFocused) Color.Cyan else Color.White, fontSize = 11.sp)
     }
 }
 
@@ -490,7 +529,7 @@ fun ChannelGridItemCompact(channel: CloudChannel, onSelected: () -> Unit) {
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(110.dp).scale(scale).onFocusChanged { isFocused = it.isFocused }.focusable().clickable { onSelected() }
+        modifier = Modifier.width(90.dp).scale(scale).onFocusChanged { isFocused = it.isFocused }.focusable().clickable { onSelected() }
             .onPreviewKeyEvent {
                 if (it.nativeKeyEvent.action == KeyEvent.ACTION_UP && (it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER || it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER)) {
                     onSelected(); true
@@ -498,8 +537,8 @@ fun ChannelGridItemCompact(channel: CloudChannel, onSelected: () -> Unit) {
             }
     ) {
         Box(
-            modifier = Modifier.aspectRatio(16f/9f).clip(RoundedCornerShape(8.dp)).background(Color.DarkGray)
-                .border(width = 2.dp, color = if (isFocused) Color.Cyan else Color.Transparent, shape = RoundedCornerShape(8.dp))
+            modifier = Modifier.aspectRatio(16f/9f).clip(RoundedCornerShape(6.dp)).background(Color.DarkGray)
+                .border(width = 2.dp, color = if (isFocused) Color.Cyan else Color.Transparent, shape = RoundedCornerShape(6.dp))
         ) {
             AsyncImage(model = channel.logo, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(4.dp))
             if (channel.name.contains("HD", true)) {
@@ -508,6 +547,6 @@ fun ChannelGridItemCompact(channel: CloudChannel, onSelected: () -> Unit) {
                 }
             }
         }
-        Text(text = channel.name, color = if (isFocused) Color.Cyan else Color.White, fontSize = 10.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 11.sp, modifier = Modifier.padding(top = 2.dp))
+        Text(text = channel.name, color = if (isFocused) Color.Cyan else Color.White, fontSize = 9.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 10.sp, modifier = Modifier.padding(top = 2.dp))
     }
 }

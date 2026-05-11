@@ -153,18 +153,21 @@ fun CloudPlayerScreen(
                    ch.licenseUrl?.contains("webplay.fun", true) == true ||
                    ch.licenseUrl?.contains("jio", true) == true
 
+        val isAlex = ch.mpdUrl?.contains("alex4528.site", true) == true ||
+                    ch.licenseUrl?.contains("alex4528.site", true) == true
+
         val androidId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "0123456789abcdef"
 
         val finalUA = when {
             ch.userAgent != null && ch.userAgent != "@cloudplay" && ch.userAgent.isNotBlank() -> ch.userAgent
-            isJio -> "JioTV/7.0.8 (Linux; Android 11; SM-G998B Build/RP1A.200720.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/122.0.6261.64 Mobile Safari/537.36"
+            isJio || isAlex -> "JioTV/7.0.8 (Linux; Android 11; SM-G998B Build/RP1A.200720.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/122.0.6261.64 Mobile Safari/537.36"
             else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         }
 
         val normalizedHeaders = mutableMapOf<String, String>()
         normalizedHeaders["User-Agent"] = finalUA
 
-        if (isJio) {
+        if (isJio || isAlex) {
             normalizedHeaders["os"] = "android"
             normalizedHeaders["devicetype"] = "phone"
             normalizedHeaders["uniqueId"] = androidId
@@ -173,6 +176,11 @@ fun CloudPlayerScreen(
             normalizedHeaders["versionCode"] = "323"
             normalizedHeaders["X-Jio-Network-Type"] = "WIFI"
             normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
+
+            if (isAlex) {
+                normalizedHeaders["Origin"] = "https://alex4528.site"
+                normalizedHeaders["Referer"] = "https://alex4528.site/"
+            }
         }
 
         ch.headers?.forEach { (k, v) ->
@@ -303,6 +311,12 @@ fun CloudPlayerScreen(
                             return@onPreviewKeyEvent true
                         }
                     }
+                    Key.DirectionRight -> {
+                        if (!showChannelPanel && !showSettingsPanel) {
+                            showSettingsPanel = true
+                            return@onPreviewKeyEvent true
+                        }
+                    }
                     Key.DirectionUp -> {
                         if (!showChannelPanel && !showSettingsPanel) {
                             currentIndex = (currentIndex - 1 + cloudChannelList.size) % cloudChannelList.size
@@ -404,7 +418,7 @@ fun CloudPlayerScreen(
             CloudSettingsPanel(
                 preferenceManager = preferenceManager,
                 onClose = { showSettingsPanel = false },
-                onLogClick = { /* Handled via showPlayerLogDialog logic if needed */ }
+                onLogClick = { showSettingsPanel = false /* Handled by UI below */ }
             )
         }
 
@@ -484,7 +498,7 @@ fun CloudPlayerOverlay(
             Spacer(modifier = Modifier.height(16.dp))
             Row {
                 IconButton(onClick = onChannelsClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))) {
-                    Icon(Icons.Default.List, null, tint = Color.White)
+                    Icon(Icons.Default.Menu, null, tint = Color.White)
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 IconButton(onClick = onMenuClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))) {
@@ -562,13 +576,20 @@ fun CloudSettingsPanel(
 
             LazyColumn(modifier = Modifier.weight(1f)) {
                 item {
-                    SettingsToggleCompact("Autoplay Next", true) { /* Logic */ }
+                    var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayLastChannel) }
+                    SettingsToggleCompact("Autoplay Last played channel", checked) {
+                        checked = it
+                        preferenceManager.myPrefs.cloudAutoplayLastChannel = it
+                        preferenceManager.savePreferences()
+                    }
                 }
                 item {
-                    SettingsToggleCompact("Show Stats", false) { /* Logic */ }
-                }
-                item {
-                    SettingsActionItemCompact("Aspect Ratio", Icons.Default.AspectRatio) { /* Logic */ }
+                    var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudFocusAnimationEnabled) }
+                    SettingsToggleCompact("Focus Glow", checked) {
+                        checked = it
+                        preferenceManager.myPrefs.cloudFocusAnimationEnabled = it
+                        preferenceManager.savePreferences()
+                    }
                 }
                 item {
                     SettingsActionItemCompact("Playback Logs", Icons.Default.BugReport) { onLogClick() }
