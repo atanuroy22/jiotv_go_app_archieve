@@ -192,12 +192,6 @@ fun CloudPlayerScreen(
             normalizedHeaders[key] = v
         }
 
-        if (isJio) {
-            if (!normalizedHeaders.containsKey("X-Requested-With")) normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
-            if (!normalizedHeaders.containsKey("os")) normalizedHeaders["os"] = "Android"
-            if (!normalizedHeaders.containsKey("devicetype")) normalizedHeaders["devicetype"] = "phone"
-        }
-
         dynamicHeaders.value = normalizedHeaders
 
         playerError = null
