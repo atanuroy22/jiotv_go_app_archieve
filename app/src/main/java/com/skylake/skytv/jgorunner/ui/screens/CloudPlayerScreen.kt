@@ -160,7 +160,7 @@ fun CloudPlayerScreen(
                    ch?.licenseUrl?.contains("jio", true) == true
 
         val finalUA = if (rawUA == null || rawUA == "@cloudplay" || rawUA.isEmpty()) {
-            if (isJio) "JioTV/7.0.8 (Linux; Android 13; Build/TP1A.220624.014)" else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            if (isJio) "JioTV/Android" else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         } else {
             rawUA
         }
@@ -173,6 +173,8 @@ fun CloudPlayerScreen(
             normalizedHeaders["os"] = "android"
             normalizedHeaders["devicetype"] = "phone"
             normalizedHeaders["uniqueId"] = androidId
+            normalizedHeaders["deviceId"] = androidId
+            normalizedHeaders["appname"] = "com.jio.jiotv"
             normalizedHeaders["versionCode"] = "323"
             normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
         }
