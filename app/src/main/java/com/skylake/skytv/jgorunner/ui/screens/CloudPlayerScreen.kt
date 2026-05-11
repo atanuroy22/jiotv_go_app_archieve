@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -70,6 +71,7 @@ import com.skylake.skytv.jgorunner.utils.normalizePlaybackUrl
 import com.skylake.skytv.jgorunner.utils.setupCustomPlaybackLogic
 import com.skylake.skytv.jgorunner.utils.cleanupPlaybackLogic
 import com.skylake.skytv.jgorunner.utils.CloudMediaDrmCallback
+import com.skylake.skytv.jgorunner.data.CloudDataManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -89,9 +91,12 @@ fun CloudPlayerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    // Use the potentially filtered list from DataManager
+    val activeList = remember { CloudDataManager.currentChannelList ?: cloudChannelList }
+
     var currentIndex by remember(initialIndex) { mutableIntStateOf(initialIndex) }
     var activeCloudChannel by remember(currentIndex) {
-        mutableStateOf(cloudChannelList.getOrNull(currentIndex))
+        mutableStateOf(activeList.getOrNull(currentIndex))
     }
 
     val focusRequester = remember { FocusRequester() }
@@ -143,7 +148,7 @@ fun CloudPlayerScreen(
     }
 
     LaunchedEffect(currentIndex) {
-        val ch = cloudChannelList.getOrNull(currentIndex)
+        val ch = activeList.getOrNull(currentIndex)
         if (ch == null) return@LaunchedEffect
 
         activeCloudChannel = ch
@@ -180,6 +185,8 @@ fun CloudPlayerScreen(
             if (isAlex) {
                 normalizedHeaders["Origin"] = "https://alex4528.site"
                 normalizedHeaders["Referer"] = "https://alex4528.site/"
+                normalizedHeaders["Sec-Fetch-Mode"] = "cors"
+                normalizedHeaders["Sec-Fetch-Site"] = "cross-site"
             }
         }
 
@@ -319,13 +326,13 @@ fun CloudPlayerScreen(
                     }
                     Key.DirectionUp -> {
                         if (!showChannelPanel && !showSettingsPanel) {
-                            currentIndex = (currentIndex - 1 + cloudChannelList.size) % cloudChannelList.size
+                            currentIndex = (currentIndex - 1 + activeList.size) % activeList.size
                             return@onPreviewKeyEvent true
                         }
                     }
                     Key.DirectionDown -> {
                         if (!showChannelPanel && !showSettingsPanel) {
-                            currentIndex = (currentIndex + 1) % cloudChannelList.size
+                            currentIndex = (currentIndex + 1) % activeList.size
                             return@onPreviewKeyEvent true
                         }
                     }
@@ -349,7 +356,7 @@ fun CloudPlayerScreen(
                     numericJob = scope.launch {
                         delay(1500)
                         val num = numericBuffer.toIntOrNull()
-                        if (num != null && num in 1..cloudChannelList.size) {
+                        if (num != null && num in 1..activeList.size) {
                             currentIndex = num - 1
                         }
                         numericBuffer = ""
@@ -399,7 +406,7 @@ fun CloudPlayerScreen(
             exit = slideOutHorizontally { -it }
         ) {
             CloudSidePanel(
-                channels = cloudChannelList,
+                channels = activeList,
                 selectedIndex = panelSelectedIndex,
                 onChannelSelected = {
                     currentIndex = it
@@ -418,7 +425,7 @@ fun CloudPlayerScreen(
             CloudSettingsPanel(
                 preferenceManager = preferenceManager,
                 onClose = { showSettingsPanel = false },
-                onLogClick = { showSettingsPanel = false /* Handled by UI below */ }
+                onLogClick = { showSettingsPanel = false }
             )
         }
 
@@ -498,7 +505,7 @@ fun CloudPlayerOverlay(
             Spacer(modifier = Modifier.height(16.dp))
             Row {
                 IconButton(onClick = onChannelsClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))) {
-                    Icon(Icons.Default.Menu, null, tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.List, null, tint = Color.White)
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 IconButton(onClick = onMenuClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))) {
@@ -576,17 +583,13 @@ fun CloudSettingsPanel(
 
             LazyColumn(modifier = Modifier.weight(1f)) {
                 item {
-                    var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayLastChannel) }
-                    SettingsToggleCompact("Autoplay Last played channel", checked) {
-                        checked = it
+                    SettingsToggleRefreshed("Autoplay Last played channel", preferenceManager.myPrefs.cloudAutoplayLastChannel) {
                         preferenceManager.myPrefs.cloudAutoplayLastChannel = it
                         preferenceManager.savePreferences()
                     }
                 }
                 item {
-                    var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudFocusAnimationEnabled) }
-                    SettingsToggleCompact("Focus Glow", checked) {
-                        checked = it
+                    SettingsToggleRefreshed("Focus Glow", preferenceManager.myPrefs.cloudFocusAnimationEnabled) {
                         preferenceManager.myPrefs.cloudFocusAnimationEnabled = it
                         preferenceManager.savePreferences()
                     }

@@ -75,7 +75,6 @@ fun CloudMainScreen(
     var isSearchVisible by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
-    // Per-server filter storage
     val serverFiltersJson = preferenceManager.myPrefs.cloudServerFilters ?: "{}"
     val serverFiltersMap = remember(serverFiltersJson) {
         try {
@@ -126,7 +125,7 @@ fun CloudMainScreen(
 
     LaunchedEffect(currentServer) {
         currentServer?.let { server ->
-            isSidebarVisible = false // Auto-collapse on server selection
+            isSidebarVisible = false
             channels = emptyList()
             isLoadingChannels = true
             errorMessage = null
@@ -144,11 +143,15 @@ fun CloudMainScreen(
 
             if (channels.isNotEmpty()) {
                 if (preferenceManager.myPrefs.cloudAutoplayFirstChannel) {
+                    CloudDataManager.currentChannelList = filteredChannels
                     onPlayChannel(channels.first(), channels)
                 } else if (preferenceManager.myPrefs.cloudAutoplayLastChannel) {
                     val lastId = preferenceManager.myPrefs.lastCloudPlayedChannelId
                     val lastChannel = channels.find { it.id == lastId }
-                    lastChannel?.let { onPlayChannel(it, channels) }
+                    lastChannel?.let {
+                        CloudDataManager.currentChannelList = filteredChannels
+                        onPlayChannel(it, channels)
+                    }
                 }
             }
         }
@@ -169,14 +172,14 @@ fun CloudMainScreen(
             .fillMaxSize()
             .background(Color(0xFF0A0A0A))
     ) {
-        // Collapsible Sidebar (Servers + Settings)
+        // Sidebar
         AnimatedVisibility(
             visible = isSidebarVisible,
             enter = expandHorizontally() + fadeIn(),
             exit = shrinkHorizontally() + fadeOut()
         ) {
             Row(modifier = Modifier.fillMaxHeight()) {
-                // Column 1: Servers
+                // Servers
                 Column(
                     modifier = Modifier
                         .width(170.dp)
@@ -203,7 +206,7 @@ fun CloudMainScreen(
                     }
                 }
 
-                // Column 2: Settings
+                // Settings
                 Column(
                     modifier = Modifier
                         .width(180.dp)
@@ -214,17 +217,13 @@ fun CloudMainScreen(
                     Text("Settings", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
                     LazyColumn(modifier = Modifier.weight(1f)) {
                         item {
-                            var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayFirstChannel) }
-                            SettingsToggleCompact("Autoplay First", checked) {
-                                checked = it
+                            SettingsToggleRefreshed("Autoplay First", preferenceManager.myPrefs.cloudAutoplayFirstChannel) {
                                 preferenceManager.myPrefs.cloudAutoplayFirstChannel = it
                                 preferenceManager.savePreferences()
                             }
                         }
                         item {
-                            var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayLastChannel) }
-                            SettingsToggleCompact("Autoplay Last", checked) {
-                                checked = it
+                            SettingsToggleRefreshed("Autoplay Last", preferenceManager.myPrefs.cloudAutoplayLastChannel) {
                                 preferenceManager.myPrefs.cloudAutoplayLastChannel = it
                                 preferenceManager.savePreferences()
                             }
@@ -284,7 +283,7 @@ fun CloudMainScreen(
             }
         }
 
-        // Conditional Search Column
+        // Search Panel
         AnimatedVisibility(
             visible = isSearchVisible,
             enter = expandHorizontally() + fadeIn(),
@@ -292,7 +291,7 @@ fun CloudMainScreen(
         ) {
             Column(
                 modifier = Modifier
-                    .width(200.dp)
+                    .width(220.dp)
                     .fillMaxHeight()
                     .background(Color(0xFF222222))
                     .padding(8.dp)
@@ -312,11 +311,25 @@ fun CloudMainScreen(
                         }
                     }
                 )
-                Text("Found ${filteredChannels.size}", color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(4.dp))
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = {
+                        if (searchQuery.isNotEmpty()) searchQuery = "" else isSearchVisible = false
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(if (searchQuery.isNotEmpty()) "Clear Search" else "Close Search", fontSize = 12.sp)
+                }
+
+                Text("Found ${filteredChannels.size}", color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
             }
         }
 
-        // Main Channel Grid
+        // Channels
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
                 if (!isSidebarVisible) {
@@ -368,7 +381,6 @@ fun CloudMainScreen(
                         ChannelGridItemCompact(
                             channel = channel,
                             onSelected = {
-                                // Store the active filtered list for the player
                                 CloudDataManager.currentChannelList = filteredChannels
                                 onPlayChannel(channel, filteredChannels)
                             }
@@ -492,17 +504,18 @@ fun ServerListItem(
 }
 
 @Composable
-fun SettingsToggleCompact(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+fun SettingsToggleRefreshed(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
+    var localChecked by remember(checked) { mutableStateOf(checked) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().onFocusChanged { isFocused = it.isFocused }.focusable()
-            .clickable { onCheckedChange(!checked) }.padding(horizontal = 8.dp, vertical = 4.dp)
+            .clickable { localChecked = !localChecked; onCheckedChange(localChecked) }.padding(horizontal = 8.dp, vertical = 4.dp)
             .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(4.dp))
             .padding(4.dp)
     ) {
         Text(label, color = if (isFocused) Color.Cyan else Color.White, modifier = Modifier.weight(1f), fontSize = 11.sp)
-        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = Color.Cyan), modifier = Modifier.scale(0.6f))
+        Switch(checked = localChecked, onCheckedChange = { localChecked = it; onCheckedChange(it) }, colors = SwitchDefaults.colors(checkedThumbColor = Color.Cyan), modifier = Modifier.scale(0.6f))
     }
 }
 
