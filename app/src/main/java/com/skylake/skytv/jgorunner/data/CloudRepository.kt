@@ -37,7 +37,6 @@ class CloudRepository(private val context: Context) {
     }
 
     suspend fun fetchChannels(url: String, forceRefresh: Boolean = false): List<CloudChannel> = withContext(Dispatchers.IO) {
-        // Special handling for Localhost Binary (M3U or JSON)
         if (url.contains("localhost") || url.contains("127.0.0.1")) {
             return@withContext fetchLocalChannels(url)
         }
@@ -75,31 +74,41 @@ class CloudRepository(private val context: Context) {
     }
 
     private suspend fun fetchLocalChannels(url: String): List<CloudChannel> = withContext(Dispatchers.IO) {
+        // Try to fetch as M3U first for localhost as it's the most reliable source for metadata in the current binary
         try {
-            // Try fetching as JSON first (if the binary supports it)
+            val request = Request.Builder().url(url).build()
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: ""
+                    if (body.contains("#EXTM3U")) {
+                        return@withContext parseM3U(body, url)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("CloudRepository", "Local M3U fetch failed", e)
+        }
+
+        // Fallback to JSON if M3U fails or is not present
+        try {
             val jsonUrl = url.replace("playlist.m3u", "channels.json")
             val request = Request.Builder().url(jsonUrl).build()
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     val body = response.body?.string() ?: ""
-                    val type = object : TypeToken<List<CloudChannel>>() {}.type
-                    return@use gson.fromJson<List<CloudChannel>>(body, type) ?: emptyList<CloudChannel>()
+                    // Try parsing as List<CloudChannel> first
+                    try {
+                        val type = object : TypeToken<List<CloudChannel>>() {}.type
+                        return@use gson.fromJson<List<CloudChannel>>(body, type) ?: emptyList<CloudChannel>()
+                    } catch (_: Exception) {
+                        // If it's the standard binary JSON, it might need manual mapping
+                        Log.d("CloudRepository", "Local JSON parse failed, trying manual mapping")
+                    }
                 }
             }
         } catch (_: Exception) {}
 
-        try {
-            // Fallback: Parse M3U and map to CloudChannel
-            val request = Request.Builder().url(url).build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use emptyList()
-                val body = response.body?.string() ?: ""
-                return@use parseM3U(body, url)
-            }
-        } catch (e: Exception) {
-            Log.e("CloudRepository", "Local fetch failed", e)
-            emptyList()
-        }
+        emptyList()
     }
 
     private fun parseM3U(m3u: String, baseUrl: String): List<CloudChannel> {
@@ -108,6 +117,10 @@ class CloudRepository(private val context: Context) {
         var currentName = ""
         var currentLogo = ""
         var currentGroup = ""
+        var currentLanguage = ""
+
+        val indianLanguages = listOf("Hindi", "English", "Tamil", "Telugu", "Malayalam", "Kannada", "Bengali", "Marathi", "Gujarati", "Punjabi", "Urdu", "Odia", "Assamese")
+        val baseServerUrl = baseUrl.substringBeforeLast("/")
 
         lines.forEach { line ->
             if (line.startsWith("#EXTINF")) {
@@ -115,17 +128,31 @@ class CloudRepository(private val context: Context) {
                 if (currentName == line) currentName = line.substringAfter(",")
                 currentLogo = line.substringAfter("tvg-logo=\"").substringBefore("\"")
                 currentGroup = line.substringAfter("group-title=\"").substringBefore("\"")
-            } else if (line.startsWith("http")) {
+
+                // Improved language extraction
+                val langMatch = Regex("""tvg-language="([^"]+)"""").find(line) ?: Regex("""language="([^"]+)"""").find(line)
+                val langTag = langMatch?.groupValues?.get(1)
+
+                if (!langTag.isNullOrBlank()) {
+                    currentLanguage = langTag
+                } else {
+                    // Multi-language detection from name
+                    val found = indianLanguages.filter { currentName.contains(it, ignoreCase = true) }
+                    currentLanguage = if (found.isNotEmpty()) found.distinct().joinToString(", ") else "Hindi"
+                }
+
+            } else if (line.trim().startsWith("http")) {
+                val channelUrl = line.trim()
                 list.add(CloudChannel(
-                    type = if (line.contains(".mpd")) "dash" else "hls",
-                    id = line.hashCode().toString(),
-                    name = currentName,
-                    group = currentGroup,
-                    language = "Hindi",
-                    logo = currentLogo,
+                    type = if (channelUrl.contains(".mpd")) "dash" else "hls",
+                    id = channelUrl.hashCode().toString(),
+                    name = currentName.trim(),
+                    group = if (currentGroup.isBlank()) "General" else currentGroup.trim(),
+                    language = currentLanguage.trim(),
+                    logo = if (currentLogo.startsWith("http")) currentLogo else "$baseServerUrl/jtvimage/$currentLogo",
                     userAgent = "JioTV",
-                    mpdUrl = if (line.contains(".mpd")) line else null,
-                    m3u8Url = if (!line.contains(".mpd")) line else null,
+                    mpdUrl = if (channelUrl.contains(".mpd")) channelUrl else null,
+                    m3u8Url = if (!channelUrl.contains(".mpd")) channelUrl else null,
                     licenseUrl = null,
                     headers = null,
                     expiresIn = null
