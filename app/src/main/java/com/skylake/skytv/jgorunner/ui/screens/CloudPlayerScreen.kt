@@ -120,13 +120,14 @@ fun CloudPlayerScreen(
     var showNumericOverlay by remember { mutableStateOf(false) }
     var numericJob by remember { mutableStateOf<Job?>(null) }
 
-    // State to track if we are currently attempting a fallback from MPD to HLS
+    // Unified state for fallbacks and silent transitions
     var isFallbackAttempt by remember(currentIndex) { mutableStateOf(false) }
+    var isSilentTransition by remember(currentIndex) { mutableStateOf(false) }
 
     val okHttpClient = remember {
         OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(35, TimeUnit.SECONDS)
+            .readTimeout(35, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
@@ -138,23 +139,22 @@ fun CloudPlayerScreen(
                     override fun onPlayerError(error: PlaybackException) {
                         LogCollector.logError("CloudPlayer Error: ${error.errorCodeName} - ${error.message}", error)
 
-                        // Check if we should fallback from MPD to HLS
+                        // Silent DASH-to-HLS fallback trigger
                         if (!isFallbackAttempt && activeCloudChannel?.m3u8Url != null &&
                             (error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ||
                              error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS)) {
 
-                            LogCollector.log("DASH playback failed, falling back to HLS for ${activeCloudChannel?.name}")
+                            LogCollector.log("DASH error, silently falling back to HLS for ${activeCloudChannel?.name}")
                             isFallbackAttempt = true
-                            playerError = "DASH failed, trying HLS..."
-
-                            Handler(Looper.getMainLooper()).postDelayed({
-                                playerError = null
-                                // The LaunchedEffect(currentIndex, isFallbackAttempt) will handle the switch
-                            }, 1000)
+                            isSilentTransition = true
+                            // No playerError set here to keep UI clean
                             return
                         }
 
-                        playerError = "${error.errorCodeName}\n${error.message}"
+                        // Only show error if we aren't in a silent transition
+                        if (!isSilentTransition) {
+                            playerError = "${error.errorCodeName}\n${error.message}"
+                        }
 
                         if (retryCountRef.value < 5) {
                             retryCountRef.value++
@@ -169,6 +169,7 @@ fun CloudPlayerScreen(
                         if (state == Player.STATE_READY) {
                             retryCountRef.value = 0
                             playerError = null
+                            isSilentTransition = false // Transition complete
 
                             activeCloudChannel?.let { ch ->
                                 if (!ch.id.isNullOrBlank() && serverUrl != null) {
@@ -247,18 +248,16 @@ fun CloudPlayerScreen(
         playerError = null
         retryCountRef.value = 0
 
-        // Use HLS if isFallbackAttempt is true, otherwise prefer MPD
         val playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
 
         if (playbackUrl.isNotBlank()) {
             val normalized = normalizePlaybackUrl(context, playbackUrl)
-            LogCollector.log("Preparing Cloud Player: ${ch.name} -> $normalized (${if (isFallbackAttempt) "Fallback HLS" else "Primary"})")
+            LogCollector.log("Preparing Cloud Player: ${ch.name} -> $normalized (${if (isFallbackAttempt) "HLS Fallback" else "Primary"})")
 
             val builder = MediaItem.Builder()
                 .setUri(normalized.toUri())
                 .setMediaId(ch.id ?: "")
 
-            // Determine type based on URL and current fallback state
             val isDash = !isFallbackAttempt && (normalized.contains(".mpd") || ch.type == "dash")
 
             if (isDash) {
@@ -454,6 +453,17 @@ fun CloudPlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
+        // Silent indicator for fallback or initial loading
+        if (isSilentTransition) {
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Color.Cyan, modifier = Modifier.size(32.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Optimizing Quality...", color = Color.Cyan, fontSize = 12.sp)
+                }
+            }
+        }
+
         // Overlay UI
         if (showChannelOverlay && !showChannelPanel && !showSettingsPanel) {
             CloudPlayerOverlay(
@@ -524,7 +534,7 @@ fun CloudPlayerScreen(
 
         var showPlayerLogDialog by remember { mutableStateOf(false) }
 
-        if (playerError != null) {
+        if (playerError != null && !isSilentTransition) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                     Icon(Icons.Default.Error, contentDescription = null, tint = Color.Red, modifier = Modifier.size(48.dp))
