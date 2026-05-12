@@ -117,6 +117,7 @@ fun CloudMainScreen(
                 channel.group?.contains(filter, ignoreCase = true) == true
             }
 
+            // Fixed: Support multi-language strings in channel.language (e.g., "Hindi, English")
             val matchesLanguage = selectedLanguages.isEmpty() || selectedLanguages.any { filter ->
                 channel.language?.contains(filter, ignoreCase = true) == true
             }
@@ -550,9 +551,11 @@ fun CloudMainScreen(
     }
 
     if (showLanguageDialog) {
+        // Fixed: Ensure available languages include all detected from channels
         val defaultLangs = listOf("Hindi", "English", "Tamil", "Telugu", "Malayalam", "Kannada", "Bengali", "Marathi", "Gujarati", "Punjabi", "Urdu", "Odia", "Assamese")
         val availableLangs = remember(channels) {
-            (channels.mapNotNull { it.language } + defaultLangs).distinct().sorted()
+            val detected = channels.flatMap { it.language?.split(",")?.map { l -> l.trim() } ?: emptyList() }
+            (detected + defaultLangs).filter { it.isNotEmpty() }.distinct().sorted()
         }
         MultiSelectFilterDialog(
             title = "Languages",
