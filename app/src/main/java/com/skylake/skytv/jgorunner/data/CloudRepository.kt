@@ -37,19 +37,20 @@ class CloudRepository(private val context: Context) {
     }
 
     suspend fun fetchChannels(url: String, forceRefresh: Boolean = false): List<CloudChannel> = withContext(Dispatchers.IO) {
-        val cacheFile = File(cacheDir, "cloud_channels_${url.hashCode()}.json")
+        // Special handling for Localhost Binary (M3U or JSON)
+        if (url.contains("localhost") || url.contains("127.0.0.1")) {
+            return@withContext fetchLocalChannels(url)
+        }
 
+        val cacheFile = File(cacheDir, "cloud_channels_${url.hashCode()}.json")
         if (!forceRefresh && cacheFile.exists()) {
             val lastModified = cacheFile.lastModified()
-            val now = System.currentTimeMillis()
-            if (now - lastModified < TimeUnit.HOURS.toMillis(1)) {
+            if (System.currentTimeMillis() - lastModified < TimeUnit.HOURS.toMillis(1)) {
                 try {
                     val body = cacheFile.readText()
                     val type = object : TypeToken<List<CloudChannel>>() {}.type
                     return@withContext gson.fromJson<List<CloudChannel>>(body, type) ?: emptyList()
-                } catch (e: Exception) {
-                    Log.e("CloudRepository", "Error reading cache", e)
-                }
+                } catch (_: Exception) {}
             }
         }
 
@@ -58,32 +59,83 @@ class CloudRepository(private val context: Context) {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use emptyList()
                 val body = response.body?.string() ?: return@use emptyList()
-
-                // Cache the response
                 cacheFile.writeText(body)
-
                 val type = object : TypeToken<List<CloudChannel>>() {}.type
                 try {
-                    gson.fromJson<List<CloudChannel>>(body, type) ?: emptyList()
+                    gson.fromJson<List<CloudChannel>>(body, type) ?: emptyList<CloudChannel>()
                 } catch (e: Exception) {
-                    Log.e("CloudRepository", "Direct parse failed, trying object wrap", e)
-                    // If the JSON is an object { "channels": [...] } or similar, we might need a more flexible parser
-                    // For now, let's just log the body to see what's wrong
-                    Log.d("CloudRepository", "Problematic JSON: ${body.take(500)}")
+                    Log.e("CloudRepository", "Parse failed for $url", e)
                     emptyList()
                 }
             }
         } catch (e: Exception) {
-            Log.e("CloudRepository", "Error fetching channels", e)
+            Log.e("CloudRepository", "Fetch failed for $url", e)
             emptyList()
         }
     }
 
-    fun clearCache() {
-        cacheDir.listFiles()?.forEach {
-            if (it.name.startsWith("cloud_channels_")) {
-                it.delete()
+    private suspend fun fetchLocalChannels(url: String): List<CloudChannel> = withContext(Dispatchers.IO) {
+        try {
+            // Try fetching as JSON first (if the binary supports it)
+            val jsonUrl = url.replace("playlist.m3u", "channels.json")
+            val request = Request.Builder().url(jsonUrl).build()
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: ""
+                    val type = object : TypeToken<List<CloudChannel>>() {}.type
+                    return@use gson.fromJson<List<CloudChannel>>(body, type) ?: emptyList<CloudChannel>()
+                }
+            }
+        } catch (_: Exception) {}
+
+        try {
+            // Fallback: Parse M3U and map to CloudChannel
+            val request = Request.Builder().url(url).build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use emptyList()
+                val body = response.body?.string() ?: ""
+                return@use parseM3U(body, url)
+            }
+        } catch (e: Exception) {
+            Log.e("CloudRepository", "Local fetch failed", e)
+            emptyList()
+        }
+    }
+
+    private fun parseM3U(m3u: String, baseUrl: String): List<CloudChannel> {
+        val list = mutableListOf<CloudChannel>()
+        val lines = m3u.split("\n")
+        var currentName = ""
+        var currentLogo = ""
+        var currentGroup = ""
+
+        lines.forEach { line ->
+            if (line.startsWith("#EXTINF")) {
+                currentName = line.substringAfter("tvg-name=\"").substringBefore("\"")
+                if (currentName == line) currentName = line.substringAfter(",")
+                currentLogo = line.substringAfter("tvg-logo=\"").substringBefore("\"")
+                currentGroup = line.substringAfter("group-title=\"").substringBefore("\"")
+            } else if (line.startsWith("http")) {
+                list.add(CloudChannel(
+                    type = if (line.contains(".mpd")) "dash" else "hls",
+                    id = line.hashCode().toString(),
+                    name = currentName,
+                    group = currentGroup,
+                    language = "Hindi",
+                    logo = currentLogo,
+                    userAgent = "JioTV",
+                    mpdUrl = if (line.contains(".mpd")) line else null,
+                    m3u8Url = if (!line.contains(".mpd")) line else null,
+                    licenseUrl = null,
+                    headers = null,
+                    expiresIn = null
+                ))
             }
         }
+        return list
+    }
+
+    fun clearCache() {
+        cacheDir.listFiles()?.forEach { if (it.name.startsWith("cloud_channels_")) it.delete() }
     }
 }

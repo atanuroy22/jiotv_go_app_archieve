@@ -64,8 +64,17 @@ fun CloudHomeScreen(
     var subExpiry by remember { mutableLongStateOf(preferenceManager.myPrefs.cloudSubExpiry) }
     val isSubscribed = remember(subExpiry) { subExpiry > System.currentTimeMillis() }
 
+    val freeJioServer = remember {
+        CloudServer(
+            name = "Free Jio",
+            url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
+            logo = "https://iili.io/f1zkPwP.md.png"
+        )
+    }
+
     LaunchedEffect(Unit) {
-        servers = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
+        val fetched = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
+        servers = fetched + freeJioServer
         isLoading = false
     }
 
@@ -109,8 +118,8 @@ fun CloudHomeScreen(
             )
 
             Text(
-                text = if (isSubscribed) "Premium Service Active" else "Subscription Required",
-                color = if (isSubscribed) Color.Green else Color.Red,
+                text = if (isSubscribed) "Premium Service Active" else "Free Mode Active",
+                color = if (isSubscribed) Color.Green else Color.Cyan,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.padding(bottom = 48.dp)
@@ -118,51 +127,16 @@ fun CloudHomeScreen(
 
             if (isLoading) {
                 CircularProgressIndicator(color = Color.Cyan)
-            } else if (servers.isEmpty()) {
-                Text(text = "No servers found", color = Color.Gray)
-                Button(onClick = { isLoading = true }) { Text("Retry") }
-            } else if (!isSubscribed) {
-                // Subscription UI
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "To access cloud servers, please buy a subscription.",
-                        color = Color.LightGray,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 32.dp)
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Row {
-                        Button(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/@atanu_roy"))
-                                context.startActivity(intent)
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088CC))
-                        ) {
-                            Icon(Icons.Default.ShoppingCart, null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Buy Subscription")
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Button(
-                            onClick = { showCouponDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
-                        ) {
-                            Icon(Icons.Default.Add, null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Add Coupon")
-                        }
-                    }
-                }
             } else {
-                // Servers UI
+                val visibleServers = if (isSubscribed) servers else listOf(freeJioServer)
+
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 32.dp),
                     horizontalArrangement = Arrangement.spacedBy(24.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    itemsIndexed(servers) { index, server ->
+                    itemsIndexed(visibleServers) { index, server ->
                         val focusRequester = focusRequesters.getOrPut(index) { FocusRequester() }
                         ServerCard(
                             server = server,
@@ -181,6 +155,32 @@ fun CloudHomeScreen(
                                 focusRequester.requestFocus()
                             }
                         }
+                    }
+                }
+            }
+
+            if (!isSubscribed) {
+                Spacer(modifier = Modifier.height(32.dp))
+                Row {
+                    Button(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/@atanu_roy"))
+                            context.startActivity(intent)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088CC))
+                    ) {
+                        Icon(Icons.Default.ShoppingCart, null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Unlock Premium")
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Button(
+                        onClick = { showCouponDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+                    ) {
+                        Icon(Icons.Default.Add, null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Enter Validity Key")
                     }
                 }
             }
@@ -230,6 +230,8 @@ fun CloudHomeScreen(
             if (isSubscribed) {
                 val expiry = sdf.format(Date(subExpiry))
                 Text(text = "Expires: $expiry", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            } else {
+                Text(text = "No active subscription", color = Color.Gray, fontSize = 12.sp)
             }
         }
     }
@@ -237,16 +239,14 @@ fun CloudHomeScreen(
     if (showCouponDialog) {
         CouponDialog(
             onDismiss = { showCouponDialog = false },
-            onKeyEntered = { key ->
+            onKeyEntered = { key: String ->
                 try {
                     val decoded = String(android.util.Base64.decode(key, android.util.Base64.DEFAULT)).trim()
-                    // Expected format: DDMMYY (e.g. 130526)
                     if (decoded.length == 6) {
                         val sdf = SimpleDateFormat("ddMMyy", Locale.getDefault())
                         sdf.isLenient = false
                         val expiryDate = sdf.parse(decoded)
                         if (expiryDate != null) {
-                            // Set to 23:59:59 of that day
                             val cal = Calendar.getInstance()
                             cal.time = expiryDate
                             cal.set(Calendar.HOUR_OF_DAY, 23)

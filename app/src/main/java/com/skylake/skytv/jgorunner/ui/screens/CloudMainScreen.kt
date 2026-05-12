@@ -3,8 +3,10 @@ package com.skylake.skytv.jgorunner.ui.screens
 import android.app.Activity
 import android.widget.Toast
 import android.content.Context
+import android.content.ContextWrapper
 import android.util.Log
 import android.view.KeyEvent
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
@@ -51,6 +53,8 @@ import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import com.skylake.skytv.jgorunner.utils.LogCollector
 import com.skylake.skytv.jgorunner.data.CloudDataManager
+import com.skylake.skytv.jgorunner.core.execution.runBinary
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -111,7 +115,13 @@ fun CloudMainScreen(
     }
 
     LaunchedEffect(Unit) {
-        servers = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
+        val fetched = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
+        val freeJio = CloudServer(
+            name = "Free Jio",
+            url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
+            logo = "https://iili.io/f1zkPwP.md.png"
+        )
+        servers = fetched + freeJio
         if (currentServer == null) {
             currentServer = servers.firstOrNull()
         }
@@ -125,21 +135,52 @@ fun CloudMainScreen(
 
     LaunchedEffect(currentServer) {
         currentServer?.let { server ->
-            isSidebarVisible = false // Auto-collapse on server selection
+            isSidebarVisible = false
             channels = emptyList()
             isLoadingChannels = true
             errorMessage = null
-            try {
-                val fetchedChannels = repository.fetchChannels(server.url)
-                if (fetchedChannels.isEmpty()) {
-                    errorMessage = "No channels found on this server."
+
+            var retryCount = 0
+            val isLocal = server.url.contains("localhost") || server.url.contains("127.0.0.1")
+
+            while (retryCount < 5) {
+                try {
+                    val fetchedChannels = repository.fetchChannels(server.url)
+                    if (fetchedChannels.isNotEmpty()) {
+                        channels = fetchedChannels
+                        errorMessage = null
+                        break
+                    } else {
+                        if (isLocal) {
+                            errorMessage = "Starting local server... (${retryCount + 1})"
+                            // Trigger binary run
+                            val activity = context.findActivity() as? ComponentActivity
+                            if (activity != null) {
+                                runBinary(activity, emptyArray(), {}, {})
+                            }
+                            delay(10000)
+                        } else {
+                            errorMessage = "No channels found."
+                            break
+                        }
+                    }
+                } catch (e: Exception) {
+                    if (isLocal) {
+                        errorMessage = "Retrying local server... (${retryCount + 1})"
+                        delay(10000)
+                    } else {
+                        errorMessage = "Failed: ${e.localizedMessage}"
+                        break
+                    }
                 }
-                channels = fetchedChannels
-            } catch (e: Exception) {
-                errorMessage = "Failed to fetch channels: ${e.localizedMessage}"
-            } finally {
-                isLoadingChannels = false
+                retryCount++
             }
+
+            if (channels.isEmpty() && errorMessage == null) {
+                errorMessage = "Failed to load channels."
+            }
+
+            isLoadingChannels = false
 
             if (channels.isNotEmpty()) {
                 val lastId = if (preferenceManager.myPrefs.cloudAutoplayLastChannel) preferenceManager.myPrefs.lastCloudPlayedChannelId else null
@@ -194,13 +235,19 @@ fun CloudMainScreen(
                         Text("Servers", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
                     Box(modifier = Modifier.weight(1f)) {
+                        val subExpiry = preferenceManager.myPrefs.cloudSubExpiry
+                        val isSubscribed = subExpiry > System.currentTimeMillis()
+
                         LazyColumn {
                             items(servers) { server ->
-                                ServerListItem(
-                                    server = server,
-                                    isSelected = server.url == currentServer?.url,
-                                    onSelected = { currentServer = server }
-                                )
+                                val isLocal = server.url.contains("localhost") || server.url.contains("127.0.0.1")
+                                if (isSubscribed || isLocal) {
+                                    ServerListItem(
+                                        server = server,
+                                        isSelected = server.url == currentServer?.url,
+                                        onSelected = { currentServer = server }
+                                    )
+                                }
                             }
                         }
                     }
@@ -377,9 +424,15 @@ fun CloudMainScreen(
 
             if (isLoadingChannels) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color.Cyan)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Color.Cyan)
+                        if (errorMessage != null) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(text = errorMessage!!, color = Color.Gray, fontSize = 12.sp)
+                        }
+                    }
                 }
-            } else if (errorMessage != null) {
+            } else if (errorMessage != null && channels.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(text = errorMessage!!, color = Color.White)
@@ -435,6 +488,15 @@ fun CloudMainScreen(
             onCopy = { LogCollector.copyToClipboard(context) }
         )
     }
+}
+
+fun Context.findActivity(): Activity? {
+    var context = this
+    while (context is ContextWrapper) {
+        if (context is Activity) return context
+        context = context.baseContext
+    }
+    return null
 }
 
 @Composable
