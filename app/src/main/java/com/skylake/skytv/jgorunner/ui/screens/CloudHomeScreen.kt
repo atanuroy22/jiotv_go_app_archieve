@@ -55,12 +55,14 @@ fun CloudHomeScreen(
     var isAutoplayActive by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayEnabled) }
     var showCouponDialog by remember { mutableStateOf(false) }
 
-    val subExpiry = preferenceManager.myPrefs.cloudSubExpiry
-    val isSubscribed = subExpiry > System.currentTimeMillis()
+    var refreshTrigger by remember { mutableIntStateOf(0) }
+
+    val subExpiry = remember(refreshTrigger) { preferenceManager.myPrefs.cloudSubExpiry }
+    val isSubscribed = remember(subExpiry) { subExpiry > System.currentTimeMillis() }
 
     val focusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshTrigger) {
         val fetched = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
         val freeJio = CloudServer(
             name = "Free Jio",
@@ -186,7 +188,7 @@ fun CloudHomeScreen(
                         preferenceManager.myPrefs.cloudSubExpiry = 0L
                         preferenceManager.savePreferences()
                         Toast.makeText(context, "Subscription removed", Toast.LENGTH_SHORT).show()
-                        onNavigate("CloudHome")
+                        refreshTrigger++
                     }) {
                         Text("Remove Key", color = Color.Red, fontSize = 12.sp)
                     }
@@ -220,7 +222,7 @@ fun CloudHomeScreen(
                     preferenceManager.savePreferences()
                     Toast.makeText(context, "Key applied!", Toast.LENGTH_LONG).show()
                     showCouponDialog = false
-                    onNavigate("CloudHome")
+                    refreshTrigger++
                 } else {
                     Toast.makeText(context, "Invalid key format or expired!", Toast.LENGTH_SHORT).show()
                 }
@@ -306,23 +308,16 @@ fun CouponDialog(onDismiss: () -> Unit, onApply: (String) -> Unit) {
 
 fun validateKey(rawKey: String): Long? {
     return try {
-        // Trim and handle potential encoding variations
         val cleanKey = rawKey.trim()
         val decoded = String(android.util.Base64.decode(cleanKey, android.util.Base64.DEFAULT))
-
-        // Match 6 digits (DDMMYY)
         val match = Regex("""(\d{6})""").find(decoded) ?: return null
         val datePart = match.groupValues[1]
-
         val day = datePart.substring(0, 2).toInt()
         val month = datePart.substring(2, 4).toInt() - 1
         val year = 2000 + datePart.substring(4, 6).toInt()
-
         val cal = Calendar.getInstance()
         cal.set(year, month, day, 23, 59, 59)
         val timestamp = cal.timeInMillis
-
-        // Allow a small grace period (yesterday) to account for timezones
         if (timestamp < System.currentTimeMillis() - 86400000) null else timestamp
     } catch (e: Exception) {
         null
