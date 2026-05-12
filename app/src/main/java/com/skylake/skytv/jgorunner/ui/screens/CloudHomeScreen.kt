@@ -133,10 +133,13 @@ fun CloudHomeScreen(
                             }
                         )
                     }
-                    if (servers.size > 2) {
+                    if (servers.size > 1) {
                         item {
-                            Box(modifier = Modifier.width(40.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.ChevronRight, null, tint = Color.Gray)
+                            Box(modifier = Modifier.width(60.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.ChevronRight, null, tint = Color.Cyan, modifier = Modifier.size(32.dp))
+                                    Text("More", color = Color.Gray, fontSize = 10.sp)
+                                }
                             }
                         }
                     }
@@ -219,7 +222,7 @@ fun CloudHomeScreen(
                     showCouponDialog = false
                     onNavigate("CloudHome")
                 } else {
-                    Toast.makeText(context, "Invalid key!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Invalid key format or expired!", Toast.LENGTH_SHORT).show()
                 }
             }
         )
@@ -303,11 +306,13 @@ fun CouponDialog(onDismiss: () -> Unit, onApply: (String) -> Unit) {
 
 fun validateKey(rawKey: String): Long? {
     return try {
-        val decoded = String(android.util.Base64.decode(rawKey, android.util.Base64.DEFAULT))
+        // Trim and handle potential encoding variations
+        val cleanKey = rawKey.trim()
+        val decoded = String(android.util.Base64.decode(cleanKey, android.util.Base64.DEFAULT))
 
-        if (!decoded.startsWith("CP")) return null
-        val datePart = decoded.substring(2)
-        if (datePart.length != 6) return null
+        // Match 6 digits (DDMMYY)
+        val match = Regex("""(\d{6})""").find(decoded) ?: return null
+        val datePart = match.groupValues[1]
 
         val day = datePart.substring(0, 2).toInt()
         val month = datePart.substring(2, 4).toInt() - 1
@@ -317,7 +322,8 @@ fun validateKey(rawKey: String): Long? {
         cal.set(year, month, day, 23, 59, 59)
         val timestamp = cal.timeInMillis
 
-        if (timestamp < System.currentTimeMillis()) null else timestamp
+        // Allow a small grace period (yesterday) to account for timezones
+        if (timestamp < System.currentTimeMillis() - 86400000) null else timestamp
     } catch (e: Exception) {
         null
     }

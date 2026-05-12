@@ -24,6 +24,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -203,20 +205,30 @@ fun CloudMainScreen(
 
             isLoadingChannels = false
 
-            if (filteredChannels.isNotEmpty()) {
-                // Per-server last played persistence
+            // Re-calculate filtered list immediately for autoplay
+            val nowFiltered = channels.filter { channel ->
+                val matchesCategory = selectedCategories.isEmpty() || selectedCategories.any { filter ->
+                    channel.group?.contains(filter, ignoreCase = true) == true
+                }
+                val matchesLanguage = selectedLanguages.isEmpty() || selectedLanguages.any { filter ->
+                    channel.language?.contains(filter, ignoreCase = true) == true
+                }
+                matchesCategory && matchesLanguage
+            }
+
+            if (nowFiltered.isNotEmpty()) {
                 val serverLastPlayedMapJson = preferenceManager.myPrefs.lastCloudPlayedChannelId ?: "{}"
                 val lastPlayedMap: Map<String, String> = try {
                     gson.fromJson(serverLastPlayedMapJson, object : TypeToken<Map<String, String>>() {}.type) ?: emptyMap()
                 } catch (_: Exception) { emptyMap() }
 
                 val lastId = if (preferenceManager.myPrefs.cloudAutoplayLastChannel) lastPlayedMap[server.url] else null
-                val lastChannel = if (lastId != null) filteredChannels.find { it.id == lastId } else null
+                val lastChannel = if (lastId != null) nowFiltered.find { it.id == lastId } else null
 
                 if (lastChannel != null) {
-                    onPlayChannel(lastChannel, filteredChannels)
+                    onPlayChannel(lastChannel, nowFiltered)
                 } else if (preferenceManager.myPrefs.cloudAutoplayFirstChannel) {
-                    onPlayChannel(filteredChannels.first(), filteredChannels)
+                    onPlayChannel(nowFiltered.first(), nowFiltered)
                 }
             }
         }
@@ -381,7 +393,7 @@ fun CloudMainScreen(
                             }
                         }
                         item {
-                            SettingsActionItemCompact("Exit", Icons.Default.ExitToApp) { (context as? Activity)?.finishAffinity() }
+                            SettingsActionItemCompact("Exit", Icons.AutoMirrored.Filled.ExitToApp) { (context as? Activity)?.finishAffinity() }
                         }
                     }
                 }
@@ -413,7 +425,7 @@ fun CloudMainScreen(
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Backspace, "Clear", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                Icon(Icons.AutoMirrored.Filled.Backspace, "Clear", tint = Color.Gray, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -538,7 +550,6 @@ fun CloudMainScreen(
     }
 
     if (showLanguageDialog) {
-        // Expanded pre-populated languages
         val defaultLangs = listOf("Hindi", "English", "Tamil", "Telugu", "Malayalam", "Kannada", "Bengali", "Marathi", "Gujarati", "Punjabi", "Urdu", "Odia", "Assamese")
         val availableLangs = remember(channels) {
             (channels.mapNotNull { it.language } + defaultLangs).distinct().sorted()
