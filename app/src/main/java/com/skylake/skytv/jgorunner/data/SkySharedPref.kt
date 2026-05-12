@@ -209,6 +209,19 @@ class SkySharedPref(context: Context) {
         @SharedPrefKey("setupPending") var setupPending: Boolean = true,
         @SharedPrefKey("enable_pip") var enablePip: Boolean = false,
 
+        @SharedPrefKey("cloud_autoplay_enabled") var cloudAutoplayEnabled: Boolean = false,
+        @SharedPrefKey("cloud_autoplay_first") var cloudAutoplayFirstChannel: Boolean = false,
+        @SharedPrefKey("cloud_autoplay_last") var cloudAutoplayLastChannel: Boolean = true,
+        @SharedPrefKey("last_cloud_server_url") var lastCloudServerUrl: String? = null,
+        @SharedPrefKey("last_cloud_server_name") var lastCloudServerName: String? = null,
+        @SharedPrefKey("last_cloud_played_id") var lastCloudPlayedChannelId: String? = null,
+        @SharedPrefKey("cloud_category_filter") var cloudCategoryFilter: String? = null,
+        @SharedPrefKey("cloud_language_filter") var cloudLanguageFilter: String? = null,
+        @SharedPrefKey("cloud_server_filters") var cloudServerFilters: String? = "{}",
+        @SharedPrefKey("cloud_ui_scale") var cloudUiScale: Float = 1.0f,
+        @SharedPrefKey("cloud_animation_enabled") var cloudAnimationEnabled: Boolean = true,
+        @SharedPrefKey("cloud_focus_anim_enabled") var cloudFocusAnimationEnabled: Boolean = true,
+
         // Widget-specific preferences
         @SharedPrefKey("widget_show_logs") var widgetShowLogs: Boolean = false,
         @SharedPrefKey("widget_logs") var widgetLogs: String? = "",
@@ -220,6 +233,7 @@ class SkySharedPref(context: Context) {
         @SharedPrefKey("cachedReleaseUrl") var cachedReleaseUrl: String? = null,
         @SharedPrefKey("cachedReleaseSize") var cachedReleaseSize: Long = 0L,
 
+        @SharedPrefKey("cloud_sub_expiry") var cloudSubExpiry: Long = 0L,
 
         )
 

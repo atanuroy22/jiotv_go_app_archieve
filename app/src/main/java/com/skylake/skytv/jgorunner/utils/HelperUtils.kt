@@ -132,7 +132,6 @@ fun normalizePlaybackUrl(context: Context, inputUrl: String): String {
     val qFromPref = skyPref.filterQX?.trim()?.lowercase()
     val effectiveQuality = when (qFromPref) {
         "low", "medium", "high" -> qFromPref
-        // Auto (and null/blank) should not force a fixed tier from URL query params.
         else -> null
     }
 
@@ -166,9 +165,13 @@ fun normalizePlaybackUrl(context: Context, inputUrl: String): String {
 
     val parsedAfterQuality = runCatching { Uri.parse(url) }.getOrNull()
     val path = parsedAfterQuality?.encodedPath.orEmpty()
+
+    // Fixed: Don't append .m3u8 if it's already an MPD or DASH stream
     if (path.contains("/live/", ignoreCase = true) &&
         !path.endsWith(".m3u8", ignoreCase = true) &&
-        !path.endsWith(".m3u", ignoreCase = true)
+        !path.endsWith(".m3u", ignoreCase = true) &&
+        !path.endsWith(".mpd", ignoreCase = true) &&
+        !path.endsWith(".dash", ignoreCase = true)
     ) {
         val newPath = if (path.endsWith("/")) path.dropLast(1) + ".m3u8" else "$path.m3u8"
         url = parsedAfterQuality?.buildUpon()?.encodedPath(newPath)?.build()?.toString() ?: url

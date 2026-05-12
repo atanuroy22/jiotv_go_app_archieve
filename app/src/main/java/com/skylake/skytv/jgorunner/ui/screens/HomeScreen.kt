@@ -84,6 +84,7 @@ fun HomeScreen(
     onRunIPTVButtonClick: () -> Unit,
     onWebTVButtonClick: () -> Unit,
     onDebugButtonClick: () -> Unit,
+    onCloudPlayButtonClick: () -> Unit,
     onExitButtonClick: () -> Unit
 ) {
 
@@ -216,6 +217,11 @@ fun HomeScreen(
                 enabled = isServerRunning
             ) {
                 onDebugButtonClick()
+            }
+            CloudPlayButton(
+                enabled = isServerRunning
+            ) {
+                onCloudPlayButtonClick()
             }
             WebTVButton(
                 enabled = isServerRunning
@@ -428,6 +434,37 @@ fun RowScope.DebugButton(
         enabled = enabled
     ) {
         ButtonContent("TV", Icons.TwoTone.Landscape)
+    }
+}
+
+@Composable
+fun RowScope.CloudPlayButton(
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val colorPRIME = MaterialTheme.colorScheme.primary
+    val colorSECOND = MaterialTheme.colorScheme.secondary
+    val buttonColor = remember { mutableStateOf(colorPRIME) }
+    val colorBORDER = Color(0xFF00BFFF)
+    val isFocused = remember { mutableStateOf(false) }
+    Button(
+        onClick = {
+            onClick()
+        },
+        modifier = Modifier
+            .weight(1f)
+            .padding(8.dp)
+            .onFocusChanged { focusState ->
+                isFocused.value = focusState.isFocused
+                buttonColor.value = if (focusState.isFocused) colorSECOND else colorPRIME
+            },
+        shape = RoundedCornerShape(8.dp),
+        border = if (isFocused.value) BorderStroke(2.dp, colorBORDER) else null,
+        colors = ButtonDefaults.buttonColors(containerColor = buttonColor.value),
+        contentPadding = PaddingValues(2.dp),
+        enabled = enabled
+    ) {
+        ButtonContent("Cloud", Icons.TwoTone.PlayCircleOutline)
     }
 }
 
