@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
@@ -91,7 +92,6 @@ fun CloudPlayerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Use the correctly filtered list passed from the dashboard
     val activeList = remember { CloudDataManager.currentChannelList ?: cloudChannelList }
 
     var currentIndex by remember(initialIndex) { mutableIntStateOf(initialIndex) }
@@ -99,7 +99,11 @@ fun CloudPlayerScreen(
         mutableStateOf(activeList.getOrNull(currentIndex))
     }
 
-    val focusRequester = remember { FocusRequester() }
+    val rootFocusRequester = remember { FocusRequester() }
+    val overlayFocusRequester = remember { FocusRequester() }
+    val sidePanelFocusRequester = remember { FocusRequester() }
+    val settingsPanelFocusRequester = remember { FocusRequester() }
+
     var showChannelPanel by remember { mutableStateOf(false) }
     var showSettingsPanel by remember { mutableStateOf(false) }
     var panelSelectedIndex by remember { mutableIntStateOf(currentIndex) }
@@ -141,6 +145,12 @@ fun CloudPlayerScreen(
                         if (state == Player.STATE_READY) {
                             retryCountRef.value = 0
                             playerError = null
+                            activeCloudChannel?.let { ch ->
+                                if (!ch.id.isNullOrBlank()) {
+                                    preferenceManager.myPrefs.lastCloudPlayedChannelId = ch.id
+                                    preferenceManager.savePreferences()
+                                }
+                            }
                         }
                     }
                 })
@@ -215,7 +225,8 @@ fun CloudPlayerScreen(
                 .setUri(normalized.toUri())
                 .setMediaId(ch.id ?: "")
 
-            if (normalized.contains(".mpd") || ch.type == "dash") {
+            val isDash = normalized.contains(".mpd") || ch.type == "dash"
+            if (isDash) {
                 builder.setMimeType(MimeTypes.APPLICATION_MPD)
             } else if (normalized.contains(".m3u8")) {
                 builder.setMimeType(MimeTypes.APPLICATION_M3U8)
@@ -249,7 +260,7 @@ fun CloudPlayerScreen(
                     .build(drmCallback)
 
                 val mediaItem = builder.build()
-                val mediaSource = if (normalized.contains(".mpd") || ch.type == "dash") {
+                val mediaSource = if (isDash) {
                     DashMediaSource.Factory(dataSourceFactory)
                         .setDrmSessionManagerProvider { drmSessionManager }
                         .createMediaSource(mediaItem)
@@ -260,7 +271,13 @@ fun CloudPlayerScreen(
                 }
                 exoPlayer.setMediaSource(mediaSource)
             } else {
-                exoPlayer.setMediaItem(builder.build())
+                val mediaItem = builder.build()
+                val mediaSource = if (isDash) {
+                    DashMediaSource.Factory(dataSourceFactory).createMediaSource(mediaItem)
+                } else {
+                    HlsMediaSource.Factory(dataSourceFactory).createMediaSource(mediaItem)
+                }
+                exoPlayer.setMediaSource(mediaSource)
             }
 
             exoPlayer.prepare()
@@ -281,6 +298,20 @@ fun CloudPlayerScreen(
         }
     }
 
+    LaunchedEffect(showChannelPanel) {
+        if (showChannelPanel) {
+            delay(100)
+            sidePanelFocusRequester.requestFocus()
+        }
+    }
+
+    LaunchedEffect(showSettingsPanel) {
+        if (showSettingsPanel) {
+            delay(100)
+            settingsPanelFocusRequester.requestFocus()
+        }
+    }
+
     DisposableEffect(exoPlayer) {
         onDispose {
             cleanupPlaybackLogic(exoPlayer)
@@ -291,8 +322,10 @@ fun CloudPlayerScreen(
     BackHandler {
         if (showChannelPanel) {
             showChannelPanel = false
+            rootFocusRequester.requestFocus()
         } else if (showSettingsPanel) {
             showSettingsPanel = false
+            rootFocusRequester.requestFocus()
         } else {
             (context as? Activity)?.finish()
         }
@@ -302,7 +335,7 @@ fun CloudPlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .focusRequester(focusRequester)
+            .focusRequester(rootFocusRequester)
             .focusable()
             .clickable(
                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
@@ -344,6 +377,8 @@ fun CloudPlayerScreen(
                         if (!showChannelPanel && !showSettingsPanel) {
                             showChannelOverlay = true
                             overlayVisibilityTick = System.currentTimeMillis()
+                            overlayFocusRequester.requestFocus()
+                            return@onPreviewKeyEvent true
                         }
                     }
                 }
@@ -390,6 +425,7 @@ fun CloudPlayerScreen(
             CloudPlayerOverlay(
                 channel = activeCloudChannel,
                 currentIndex = currentIndex,
+                focusRequester = overlayFocusRequester,
                 onMenuClick = { showSettingsPanel = true },
                 onChannelsClick = {
                     panelSelectedIndex = currentIndex
@@ -412,11 +448,16 @@ fun CloudPlayerScreen(
             CloudSidePanel(
                 channels = activeList,
                 selectedIndex = panelSelectedIndex,
+                focusRequester = sidePanelFocusRequester,
                 onChannelSelected = {
                     currentIndex = it
                     showChannelPanel = false
+                    rootFocusRequester.requestFocus()
                 },
-                onClose = { showChannelPanel = false }
+                onClose = {
+                    showChannelPanel = false
+                    rootFocusRequester.requestFocus()
+                }
             )
         }
 
@@ -428,7 +469,11 @@ fun CloudPlayerScreen(
         ) {
             CloudSettingsPanel(
                 preferenceManager = preferenceManager,
-                onClose = { showSettingsPanel = false },
+                focusRequester = settingsPanelFocusRequester,
+                onClose = {
+                    showSettingsPanel = false
+                    rootFocusRequester.requestFocus()
+                },
                 onLogClick = { showSettingsPanel = false }
             )
         }
@@ -488,6 +533,7 @@ fun CloudPlayerScreen(
 fun CloudPlayerOverlay(
     channel: CloudChannel?,
     currentIndex: Int,
+    focusRequester: FocusRequester,
     onMenuClick: () -> Unit,
     onChannelsClick: () -> Unit,
     onRefreshClick: () -> Unit
@@ -508,17 +554,11 @@ fun CloudPlayerOverlay(
             }
             Spacer(modifier = Modifier.height(16.dp))
             Row {
-                IconButton(onClick = onChannelsClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))) {
-                    Icon(Icons.AutoMirrored.Filled.List, null, tint = Color.White)
-                }
+                OverlayButton(onClick = onChannelsClick, icon = Icons.AutoMirrored.Filled.List, modifier = Modifier.focusRequester(focusRequester))
                 Spacer(modifier = Modifier.width(12.dp))
-                IconButton(onClick = onMenuClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))) {
-                    Icon(Icons.Default.Settings, null, tint = Color.White)
-                }
+                OverlayButton(onClick = onMenuClick, icon = Icons.Default.Settings)
                 Spacer(modifier = Modifier.width(12.dp))
-                IconButton(onClick = onRefreshClick, modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(50))) {
-                    Icon(Icons.Default.Refresh, null, tint = Color.White)
-                }
+                OverlayButton(onClick = onRefreshClick, icon = Icons.Default.Refresh)
             }
         }
 
@@ -541,14 +581,34 @@ fun CloudPlayerOverlay(
 }
 
 @Composable
+fun OverlayButton(onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier) {
+    var isFocused by remember { mutableStateOf(false) }
+    IconButton(
+        onClick = onClick,
+        modifier = modifier
+            .onFocusChanged { isFocused = it.isFocused }
+            .background(
+                if (isFocused) Color.Cyan.copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.5f),
+                RoundedCornerShape(50)
+            )
+            .border(if (isFocused) 2.dp else 0.dp, Color.Cyan, RoundedCornerShape(50))
+    ) {
+        Icon(icon, null, tint = if (isFocused) Color.Cyan else Color.White)
+    }
+}
+
+@Composable
 fun CloudSidePanel(
     channels: List<CloudChannel>,
     selectedIndex: Int,
+    focusRequester: FocusRequester,
     onChannelSelected: (Int) -> Unit,
     onClose: () -> Unit
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(selectedIndex) { listState.scrollToItem(selectedIndex) }
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex >= 0) listState.scrollToItem(selectedIndex)
+    }
 
     Box(modifier = Modifier.fillMaxHeight().width(320.dp).background(Color.Black.copy(alpha = 0.85f)).padding(16.dp)) {
         Column {
@@ -556,18 +616,34 @@ fun CloudSidePanel(
             LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
                 itemsIndexed(channels) { index, channel ->
                     val isSelected = index == selectedIndex
+                    var isFocused by remember { mutableStateOf(false) }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .then(if (index == selectedIndex) Modifier.focusRequester(focusRequester) else Modifier)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) Color.Cyan.copy(alpha = 0.2f) else Color.Transparent)
+                            .onFocusChanged { isFocused = it.isFocused }
+                            .background(
+                                if (isFocused) Color.Cyan.copy(alpha = 0.3f)
+                                else if (isSelected) Color.Cyan.copy(alpha = 0.1f)
+                                else Color.Transparent
+                            )
+                            .border(if (isFocused) 2.dp else 0.dp, Color.Cyan, RoundedCornerShape(8.dp))
+                            .focusable()
                             .clickable { onChannelSelected(index) }
                             .padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         AsyncImage(model = channel.logo, contentDescription = null, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)))
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = channel.name, color = if (isSelected) Color.Cyan else Color.White, maxLines = 1, fontSize = 14.sp)
+                        Text(
+                            text = channel.name,
+                            color = if (isFocused || isSelected) Color.Cyan else Color.White,
+                            maxLines = 1,
+                            fontSize = 14.sp,
+                            fontWeight = if (isFocused || isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
                     }
                 }
             }
@@ -578,6 +654,7 @@ fun CloudSidePanel(
 @Composable
 fun CloudSettingsPanel(
     preferenceManager: SkySharedPref,
+    focusRequester: FocusRequester,
     onClose: () -> Unit,
     onLogClick: () -> Unit
 ) {
@@ -603,7 +680,7 @@ fun CloudSettingsPanel(
                     }
                 }
                 item {
-                    SettingsActionItemCompact("Aspect Ratio", Icons.Default.AspectRatio) { /* Logic */ }
+                    SettingsActionItemCompact("Aspect Ratio", Icons.Default.AspectRatio, modifier = Modifier.focusRequester(focusRequester)) { /* Logic */ }
                 }
                 item {
                     SettingsActionItemCompact("Playback Stats", Icons.Default.BarChart) { /* Logic */ }
@@ -616,5 +693,32 @@ fun CloudSettingsPanel(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun SettingsActionItemCompact(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .onFocusChanged { isFocused = it.isFocused }
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (isFocused) Color.Cyan.copy(alpha = 0.15f) else Color.Transparent)
+            .clickable { onClick() }
+            .focusable()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = if (isFocused) Color.Cyan else Color.Gray, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(label, color = if (isFocused) Color.White else Color.Gray, fontSize = 11.sp)
     }
 }

@@ -1,10 +1,10 @@
 package com.skylake.skytv.jgorunner.ui.screens
 
+import android.app.Activity
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.view.KeyEvent
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,11 +12,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,211 +26,166 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.skylake.skytv.jgorunner.data.CloudRepository
 import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import java.util.Base64
+import java.util.Calendar
+import java.util.Date
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Locale
 
 @Composable
 fun CloudHomeScreen(
     context: Context,
-    onNavigate: (String) -> Unit,
-    onServerSelected: (CloudServer) -> Unit
+    onServerSelected: (CloudServer) -> Unit,
+    onNavigate: (String) -> Unit
 ) {
     val preferenceManager = SkySharedPref.getInstance(context)
     val repository = remember { CloudRepository(context) }
+
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
     var countdown by remember { mutableIntStateOf(5) }
-    var isAutoplayCancelled by remember { mutableStateOf(false) }
-    val autoplayEnabledState = remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayEnabled) }
-    val focusRequesters = remember { mutableStateMapOf<Int, FocusRequester>() }
-
+    var isAutoplayActive by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayEnabled) }
     var showCouponDialog by remember { mutableStateOf(false) }
-    var subExpiry by remember { mutableLongStateOf(preferenceManager.myPrefs.cloudSubExpiry) }
-    val isSubscribed = remember(subExpiry) { subExpiry > System.currentTimeMillis() }
 
-    val freeJioServer = remember {
-        CloudServer(
+    val subExpiry = preferenceManager.myPrefs.cloudSubExpiry
+    val isSubscribed = subExpiry > System.currentTimeMillis()
+
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        val fetched = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
+        val freeJio = CloudServer(
             name = "Free Jio",
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
             logo = "https://iili.io/f1zkPwP.md.png"
         )
+
+        // Only show remote servers if subscribed
+        servers = if (isSubscribed) {
+            fetched + freeJio
+        } else {
+            listOf(freeJio)
+        }
     }
 
-    LaunchedEffect(Unit) {
-        val fetched = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
-        servers = fetched + freeJioServer
-        isLoading = false
-    }
-
-    LaunchedEffect(servers, isAutoplayCancelled, isSubscribed) {
-        if (isSubscribed && autoplayEnabledState.value && servers.isNotEmpty() && !isAutoplayCancelled) {
-            while (countdown > 0 && !isAutoplayCancelled && autoplayEnabledState.value) {
+    LaunchedEffect(isAutoplayActive, servers) {
+        if (isAutoplayActive && servers.isNotEmpty()) {
+            while (countdown > 0) {
                 delay(1000)
                 countdown--
             }
-            if (!isAutoplayCancelled && countdown == 0 && autoplayEnabledState.value) {
+            if (countdown == 0) {
                 onServerSelected(servers.first())
             }
         }
+    }
+
+    BackHandler {
+        (context as? Activity)?.finishAffinity()
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0A0A0A))
-            .onPreviewKeyEvent {
-                if (countdown > 0 && !isAutoplayCancelled) {
-                    isAutoplayCancelled = true
-                }
-                false
-            },
-        contentAlignment = Alignment.Center
+            .clickable(enabled = isAutoplayActive) {
+                isAutoplayActive = false // Cancel autoplay on any click
+            }
     ) {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = "Cloud Play",
-                style = TextStyle(
-                    color = Color.White,
-                    fontSize = 42.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    shadow = Shadow(color = Color.Cyan, blurRadius = 12f)
-                ),
-                modifier = Modifier.padding(bottom = 8.dp)
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Cyan
             )
-
             Text(
-                text = if (isSubscribed) "Premium Service Active" else "Free Mode Active",
-                color = if (isSubscribed) Color.Green else Color.Cyan,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(bottom = 48.dp)
+                text = "Select a server to start streaming",
+                fontSize = 14.sp,
+                color = Color.Gray,
+                modifier = Modifier.padding(top = 4.dp, bottom = 40.dp)
             )
 
-            if (isLoading) {
+            if (servers.isEmpty()) {
                 CircularProgressIndicator(color = Color.Cyan)
             } else {
-                val visibleServers = if (isSubscribed) servers else listOf(freeJioServer)
-
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 32.dp),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.focusRequester(focusRequester)
                 ) {
-                    itemsIndexed(visibleServers) { index, server ->
-                        val focusRequester = focusRequesters.getOrPut(index) { FocusRequester() }
+                    items(servers) { server ->
                         ServerCard(
                             server = server,
-                            focusRequester = focusRequester,
-                            uiScale = preferenceManager.myPrefs.cloudUiScale,
-                            animationEnabled = preferenceManager.myPrefs.cloudAnimationEnabled,
-                            focusAnimationEnabled = preferenceManager.myPrefs.cloudFocusAnimationEnabled,
                             onSelected = {
-                                isAutoplayCancelled = true
+                                isAutoplayActive = false
                                 onServerSelected(server)
                             }
                         )
-
-                        if (index == 0) {
-                            LaunchedEffect(Unit) {
-                                focusRequester.requestFocus()
-                            }
-                        }
                     }
+                }
+
+                LaunchedEffect(Unit) {
+                    delay(500)
+                    try { focusRequester.requestFocus() } catch(_: Exception) {}
                 }
             }
 
-            if (!isSubscribed) {
-                Spacer(modifier = Modifier.height(32.dp))
-                Row {
-                    Button(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/@atanu_roy"))
-                            context.startActivity(intent)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088CC))
-                    ) {
-                        Icon(Icons.Default.ShoppingCart, null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Unlock Premium")
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Button(
-                        onClick = { showCouponDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
-                    ) {
-                        Icon(Icons.Default.Add, null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Enter Validity Key")
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.weight(1f))
 
-            if (isSubscribed && autoplayEnabledState.value && !isAutoplayCancelled && countdown > 0 && servers.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(48.dp))
+            if (isAutoplayActive && servers.isNotEmpty()) {
                 Text(
-                    text = "Autostarting in $countdown seconds...",
-                    color = Color.Cyan.copy(alpha = 0.8f),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium
+                    text = "Autoplay starting in $countdown seconds... (Press any key to cancel)",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(bottom = 20.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
-
-            if (isSubscribed) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "Autoplay", color = Color.White, modifier = Modifier.padding(end = 8.dp), fontSize = 14.sp)
-                    Switch(
-                        checked = autoplayEnabledState.value,
-                        onCheckedChange = {
-                            autoplayEnabledState.value = it
-                            preferenceManager.myPrefs.cloudAutoplayEnabled = it
-                            preferenceManager.savePreferences()
-                            if (!it) isAutoplayCancelled = true
-                        },
-                        modifier = Modifier.scale(0.8f)
-                    )
-                    Spacer(modifier = Modifier.width(24.dp))
-                    TextButton(onClick = { showCouponDialog = true }) {
-                        Text("Update Validity Key", color = Color.Cyan, fontSize = 14.sp)
-                    }
+            // Footer info
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+            ) {
+                val sdf = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                val expiryText = if (isSubscribed) {
+                    "Subscription valid until: ${sdf.format(Date(subExpiry))}"
+                } else {
+                    "Free Mode (Only Local Jio enabled)"
                 }
-            }
-        }
 
-        // Professional Footer with Expiry
-        Column(
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            val sdf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-            val today = sdf.format(Date())
-            Text(text = "Today: $today", color = Color.Gray, fontSize = 12.sp)
+                Text(
+                    text = expiryText,
+                    color = if (isSubscribed) Color.Green else Color.Yellow,
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f)
+                )
 
-            if (isSubscribed) {
-                val expiry = sdf.format(Date(subExpiry))
-                Text(text = "Expires: $expiry", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            } else {
-                Text(text = "No active subscription", color = Color.Gray, fontSize = 12.sp)
+                TextButton(onClick = { showCouponDialog = true }) {
+                    Text("Enter Key", color = Color.Cyan, fontSize = 12.sp)
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                TextButton(onClick = {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/cloudplay_jtv"))
+                    context.startActivity(intent)
+                }) {
+                    Icon(Icons.Default.SupportAgent, null, tint = Color.Cyan, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Support", color = Color.Cyan, fontSize = 12.sp)
+                }
             }
         }
     }
@@ -239,136 +193,116 @@ fun CloudHomeScreen(
     if (showCouponDialog) {
         CouponDialog(
             onDismiss = { showCouponDialog = false },
-            onKeyEntered = { key: String ->
-                try {
-                    val decoded = String(android.util.Base64.decode(key, android.util.Base64.DEFAULT)).trim()
-                    if (decoded.length == 6) {
-                        val sdf = SimpleDateFormat("ddMMyy", Locale.getDefault())
-                        sdf.isLenient = false
-                        val expiryDate = sdf.parse(decoded)
-                        if (expiryDate != null) {
-                            val cal = Calendar.getInstance()
-                            cal.time = expiryDate
-                            cal.set(Calendar.HOUR_OF_DAY, 23)
-                            cal.set(Calendar.MINUTE, 59)
-                            cal.set(Calendar.SECOND, 59)
-
-                            val newExpiry = cal.timeInMillis
-                            if (newExpiry > System.currentTimeMillis()) {
-                                subExpiry = newExpiry
-                                preferenceManager.myPrefs.cloudSubExpiry = newExpiry
-                                preferenceManager.savePreferences()
-                                showCouponDialog = false
-                                val displayDate = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(expiryDate)
-                                Toast.makeText(context, "Subscription valid until $displayDate", Toast.LENGTH_LONG).show()
-                            } else {
-                                Toast.makeText(context, "Key represents an expired date", Toast.LENGTH_SHORT).show()
-                            }
-                        } else {
-                            Toast.makeText(context, "Invalid date in key", Toast.LENGTH_SHORT).show()
-                        }
-                    } else {
-                        Toast.makeText(context, "Invalid key format", Toast.LENGTH_SHORT).show()
-                    }
-                } catch (e: Exception) {
-                    Toast.makeText(context, "Invalid or malformed key", Toast.LENGTH_SHORT).show()
+            onApply = { key ->
+                val validity = validateKey(key)
+                if (validity != null) {
+                    preferenceManager.myPrefs.cloudSubExpiry = validity
+                    preferenceManager.savePreferences()
+                    Toast.makeText(context, "Key applied successfully!", Toast.LENGTH_LONG).show()
+                    showCouponDialog = false
+                    // Reload
+                    onNavigate("CloudHome")
+                } else {
+                    Toast.makeText(context, "Invalid key format!", Toast.LENGTH_SHORT).show()
                 }
             }
         )
-    }
-}
-
-@Composable
-fun CouponDialog(onDismiss: () -> Unit, onKeyEntered: (String) -> Unit) {
-    var text by remember { mutableStateOf("") }
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = Color(0xFF1E1E1E),
-            modifier = Modifier.fillMaxWidth(0.9f)
-        ) {
-            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Add Validity Key", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    label = { Text("Enter Key") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
-                    Button(onClick = { onKeyEntered(text) }) { Text("Save Key") }
-                }
-            }
-        }
     }
 }
 
 @Composable
 fun ServerCard(
     server: CloudServer,
-    focusRequester: FocusRequester,
-    uiScale: Float = 1.0f,
-    animationEnabled: Boolean = true,
-    focusAnimationEnabled: Boolean = true,
     onSelected: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (isFocused && focusAnimationEnabled) 1.15f * uiScale else 1.0f * uiScale)
+    val scale by animateFloatAsState(if (isFocused) 1.1f else 1.0f)
+    val glowColor = if (isFocused) Color.Cyan else Color.Transparent
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .width(180.dp)
             .scale(scale)
-            .focusRequester(focusRequester)
             .onFocusChanged { isFocused = it.isFocused }
-            .focusable()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color(0xFF1A1A1A))
+            .border(2.dp, glowColor, RoundedCornerShape(12.dp))
             .clickable { onSelected() }
-            .onPreviewKeyEvent {
-                if (it.nativeKeyEvent.action == KeyEvent.ACTION_UP &&
-                    (it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER ||
-                     it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER)) {
-                    onSelected()
-                    true
-                } else false
-            }
+            .focusable()
+            .padding(16.dp)
     ) {
-        Box(
+        AsyncImage(
+            model = server.logo,
+            contentDescription = null,
             modifier = Modifier
-                .size(140.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.DarkGray)
-                .then(
-                    if (isFocused) {
-                        Modifier.border(
-                            width = 3.dp,
-                            color = Color.Cyan,
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                    } else Modifier
-                )
-        ) {
-            AsyncImage(
-                model = server.logo,
-                contentDescription = server.name,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize().padding(16.dp)
-            )
-        }
-
+                .size(100.dp)
+                .clip(RoundedCornerShape(8.dp)),
+            contentScale = ContentScale.Fit
+        )
         Spacer(modifier = Modifier.height(12.dp))
-
         Text(
             text = server.name,
-            color = if (isFocused) Color.Cyan else Color.White,
-            fontWeight = if (isFocused) FontWeight.Bold else FontWeight.Medium,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
             fontSize = 16.sp,
-            textAlign = TextAlign.Center,
-            maxLines = 1
+            textAlign = TextAlign.Center
         )
+    }
+}
+
+@Composable
+fun CouponDialog(onDismiss: () -> Unit, onApply: (String) -> Unit) {
+    var key by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Enter Validity Key", color = Color.Cyan) },
+        text = {
+            Column {
+                Text("Format: DDMMYY encoded in Base64", fontSize = 12.sp, color = Color.Gray)
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    label = { Text("Key") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Cyan)
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onApply(key) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Cyan)) {
+                Text("Apply", color = Color.Black)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+        containerColor = Color(0xFF1A1A1A),
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
+}
+
+/**
+ * Validates Base64 encoded DDMMYY key and returns timestamp of expiry (end of that day)
+ */
+fun validateKey(base64Key: String): Long? {
+    return try {
+        val decoded = String(android.util.Base64.decode(base64Key, android.util.Base64.DEFAULT))
+        if (decoded.length != 6) return null
+
+        val day = decoded.substring(0, 2).toInt()
+        val month = decoded.substring(2, 4).toInt() - 1 // 0-indexed
+        val year = 2000 + decoded.substring(4, 6).toInt()
+
+        val cal = Calendar.getInstance()
+        cal.set(year, month, day, 23, 59, 59)
+        val timestamp = cal.timeInMillis
+
+        // Must not be in the past
+        if (timestamp < System.currentTimeMillis()) null else timestamp
+    } catch (e: Exception) {
+        null
     }
 }
