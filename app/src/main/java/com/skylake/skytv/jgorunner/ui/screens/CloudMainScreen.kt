@@ -204,7 +204,13 @@ fun CloudMainScreen(
             isLoadingChannels = false
 
             if (filteredChannels.isNotEmpty()) {
-                val lastId = if (preferenceManager.myPrefs.cloudAutoplayLastChannel) preferenceManager.myPrefs.lastCloudPlayedChannelId else null
+                // Per-server last played persistence
+                val serverLastPlayedMapJson = preferenceManager.myPrefs.lastCloudPlayedChannelId ?: "{}"
+                val lastPlayedMap: Map<String, String> = try {
+                    gson.fromJson(serverLastPlayedMapJson, object : TypeToken<Map<String, String>>() {}.type) ?: emptyMap()
+                } catch (_: Exception) { emptyMap() }
+
+                val lastId = if (preferenceManager.myPrefs.cloudAutoplayLastChannel) lastPlayedMap[server.url] else null
                 val lastChannel = if (lastId != null) filteredChannels.find { it.id == lastId } else null
 
                 if (lastChannel != null) {
@@ -532,12 +538,14 @@ fun CloudMainScreen(
     }
 
     if (showLanguageDialog) {
-        val languages = remember(channels) {
-            channels.mapNotNull { it.language }.distinct().sorted()
+        // Expanded pre-populated languages
+        val defaultLangs = listOf("Hindi", "English", "Tamil", "Telugu", "Malayalam", "Kannada", "Bengali", "Marathi", "Gujarati", "Punjabi", "Urdu", "Odia", "Assamese")
+        val availableLangs = remember(channels) {
+            (channels.mapNotNull { it.language } + defaultLangs).distinct().sorted()
         }
         MultiSelectFilterDialog(
             title = "Languages",
-            options = languages,
+            options = availableLangs,
             selectedOptions = selectedLanguages,
             onDismiss = { showLanguageDialog = false },
             onConfirm = {

@@ -64,6 +64,8 @@ import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.skylake.skytv.jgorunner.activities.MainActivity
 import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
@@ -87,10 +89,12 @@ import java.util.concurrent.TimeUnit
 fun CloudPlayerScreen(
     preferenceManager: SkySharedPref,
     cloudChannelList: List<CloudChannel>,
-    initialIndex: Int
+    initialIndex: Int,
+    serverUrl: String? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val gson = remember { Gson() }
 
     val activeList = remember { CloudDataManager.currentChannelList ?: cloudChannelList }
 
@@ -118,8 +122,8 @@ fun CloudPlayerScreen(
 
     val okHttpClient = remember {
         OkHttpClient.Builder()
-            .connectTimeout(25, TimeUnit.SECONDS)
-            .readTimeout(25, TimeUnit.SECONDS)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
@@ -132,7 +136,7 @@ fun CloudPlayerScreen(
                         LogCollector.logError("CloudPlayer Error: ${error.errorCodeName} - ${error.message}", error)
                         playerError = "${error.errorCodeName}\n${error.message}"
 
-                        if (retryCountRef.value < 3) {
+                        if (retryCountRef.value < 5) {
                             retryCountRef.value++
                             Handler(Looper.getMainLooper()).postDelayed({
                                 prepare()
@@ -145,9 +149,17 @@ fun CloudPlayerScreen(
                         if (state == Player.STATE_READY) {
                             retryCountRef.value = 0
                             playerError = null
+
+                            // Save per-server last played
                             activeCloudChannel?.let { ch ->
-                                if (!ch.id.isNullOrBlank()) {
-                                    preferenceManager.myPrefs.lastCloudPlayedChannelId = ch.id
+                                if (!ch.id.isNullOrBlank() && serverUrl != null) {
+                                    val mapJson = preferenceManager.myPrefs.lastCloudPlayedChannelId ?: "{}"
+                                    val map: MutableMap<String, String> = try {
+                                        gson.fromJson(mapJson, object : TypeToken<MutableMap<String, String>>() {}.type) ?: mutableMapOf()
+                                    } catch (_: Exception) { mutableMapOf() }
+
+                                    map[serverUrl] = ch.id
+                                    preferenceManager.myPrefs.lastCloudPlayedChannelId = gson.toJson(map)
                                     preferenceManager.savePreferences()
                                 }
                             }

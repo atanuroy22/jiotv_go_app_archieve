@@ -22,6 +22,7 @@ import com.skylake.skytv.jgorunner.ui.theme.JGOTheme
 class CloudPlayerActivity : ComponentActivity() {
 
     private var initialIndexState by mutableIntStateOf(0)
+    private var serverUrl: String? = null
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,6 +31,7 @@ class CloudPlayerActivity : ComponentActivity() {
         val prefManager = SkySharedPref.getInstance(this)
         val channels = CloudDataManager.currentChannelList ?: emptyList()
         initialIndexState = intent.getIntExtra("current_cloud_channel_index", 0)
+        serverUrl = intent.getStringExtra("server_url")
 
         applyImmersive(this)
 
@@ -38,7 +40,8 @@ class CloudPlayerActivity : ComponentActivity() {
                 CloudPlayerScreen(
                     preferenceManager = prefManager,
                     cloudChannelList = channels,
-                    initialIndex = initialIndexState
+                    initialIndex = initialIndexState,
+                    serverUrl = serverUrl
                 )
             }
         }
@@ -51,6 +54,7 @@ class CloudPlayerActivity : ComponentActivity() {
         if (newIndex != -1) {
             initialIndexState = newIndex
         }
+        serverUrl = intent.getStringExtra("server_url")
     }
 
     private fun applyImmersive(activity: Activity) {
@@ -58,7 +62,7 @@ class CloudPlayerActivity : ComponentActivity() {
         activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         val windowInsetsController = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-        windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
-        windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        windowInsetsController?.hide(WindowInsetsCompat.Type.systemBars())
+        windowInsetsController?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     }
 }

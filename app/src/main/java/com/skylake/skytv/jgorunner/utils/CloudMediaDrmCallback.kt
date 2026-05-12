@@ -40,7 +40,6 @@ class CloudMediaDrmCallback(
             licenseUrl = defaultLicenseUrl
         }
 
-        // Check if the request data is JSON (ClearKey often uses JSON challenges)
         val requestData = request.data
         val contentType = if (requestData.isNotEmpty() && requestData[0].toInt().toChar() == '{') {
             "application/json"
@@ -63,28 +62,33 @@ class CloudMediaDrmCallback(
         val okRequest = builder.build()
         LogCollector.log("DRM Key Request: POST $licenseUrl (Type: $contentType)")
 
-        return httpClient.newCall(okRequest).execute().use { response ->
-            val responseBodyBytes = response.body?.bytes() ?: throw Exception("Empty license response")
+        var retryCount = 0
+        while (retryCount < 5) {
+            try {
+                httpClient.newCall(okRequest).execute().use { response ->
+                    val responseBodyBytes = response.body?.bytes() ?: throw Exception("Empty license response")
 
-            val hexPreview = if (responseBodyBytes.size >= 8) {
-                responseBodyBytes.take(8).joinToString("") { "%02x".format(it) }
-            } else "too-short"
+                    if (response.code == 502 || response.code == 504 || response.code == 500) {
+                        LogCollector.log("DRM Server Temporary Error ${response.code}, retrying ($retryCount/5)...")
+                        retryCount++
+                        Thread.sleep(1000)
+                        return@use // continue loop
+                    }
 
-            if (!response.isSuccessful) {
-                val errBody = String(responseBodyBytes.take(1024).toByteArray()).filter { it.code in 32..126 }
-                LogCollector.log("DRM Error ${response.code}: $errBody")
-                throw Exception("License server error: ${response.code}")
+                    if (!response.isSuccessful) {
+                        val errBody = String(responseBodyBytes.take(1024).toByteArray()).filter { it.code in 32..126 }
+                        LogCollector.log("DRM Error ${response.code}: $errBody")
+                        throw Exception("License server error: ${response.code}")
+                    }
+
+                    return responseBodyBytes
+                }
+            } catch (e: Exception) {
+                if (retryCount >= 4) throw e
+                retryCount++
+                Thread.sleep(1000)
             }
-
-            LogCollector.log("DRM Resp size=${responseBodyBytes.size}, hex8=$hexPreview")
-
-            // If it's a ClearKey JSON response, Media3 expects it exactly as is
-            if (responseBodyBytes.isNotEmpty() && responseBodyBytes[0].toInt().toChar() == '{') {
-                val bodyText = String(responseBodyBytes).filter { it.code in 32..126 || it == '\n' }
-                LogCollector.log("DRM JSON Body: $bodyText")
-            }
-
-            responseBodyBytes
         }
+        throw Exception("DRM Key Request failed after retries")
     }
 }

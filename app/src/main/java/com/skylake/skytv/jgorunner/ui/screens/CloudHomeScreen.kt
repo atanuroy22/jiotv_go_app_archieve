@@ -36,7 +36,6 @@ import com.skylake.skytv.jgorunner.data.CloudRepository
 import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import kotlinx.coroutines.delay
-import java.util.Base64
 import java.util.Calendar
 import java.util.Date
 import java.text.SimpleDateFormat
@@ -69,7 +68,6 @@ fun CloudHomeScreen(
             logo = "https://iili.io/f1zkPwP.md.png"
         )
 
-        // Only show remote servers if subscribed
         servers = if (isSubscribed) {
             fetched + freeJio
         } else {
@@ -98,11 +96,11 @@ fun CloudHomeScreen(
             .fillMaxSize()
             .background(Color(0xFF0A0A0A))
             .clickable(enabled = isAutoplayActive) {
-                isAutoplayActive = false // Cancel autoplay on any click
+                isAutoplayActive = false
             }
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -121,9 +119,11 @@ fun CloudHomeScreen(
             if (servers.isEmpty()) {
                 CircularProgressIndicator(color = Color.Cyan)
             } else {
+                // Modified Server Row to show more servers / partial cards
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.focusRequester(focusRequester)
+                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    modifier = Modifier.focusRequester(focusRequester).fillMaxWidth()
                 ) {
                     items(servers) { server ->
                         ServerCard(
@@ -133,6 +133,13 @@ fun CloudHomeScreen(
                                 onServerSelected(server)
                             }
                         )
+                    }
+                    if (servers.size > 2) {
+                        item {
+                            Box(modifier = Modifier.width(40.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.ChevronRight, null, tint = Color.Gray)
+                            }
+                        }
                     }
                 }
 
@@ -146,7 +153,7 @@ fun CloudHomeScreen(
 
             if (isAutoplayActive && servers.isNotEmpty()) {
                 Text(
-                    text = "Autoplay starting in $countdown seconds... (Press any key to cancel)",
+                    text = "Autoplay in $countdown... Any key to cancel",
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 14.sp,
                     modifier = Modifier.padding(bottom = 20.dp)
@@ -162,7 +169,7 @@ fun CloudHomeScreen(
                 val expiryText = if (isSubscribed) {
                     "Subscription valid until: ${sdf.format(Date(subExpiry))}"
                 } else {
-                    "Free Mode (Only Local Jio enabled)"
+                    "Free Mode (Local Jio enabled)"
                 }
 
                 Text(
@@ -172,14 +179,25 @@ fun CloudHomeScreen(
                     modifier = Modifier.weight(1f)
                 )
 
-                TextButton(onClick = { showCouponDialog = true }) {
-                    Text("Enter Key", color = Color.Cyan, fontSize = 12.sp)
+                if (isSubscribed) {
+                    TextButton(onClick = {
+                        preferenceManager.myPrefs.cloudSubExpiry = 0L
+                        preferenceManager.savePreferences()
+                        Toast.makeText(context, "Subscription removed", Toast.LENGTH_SHORT).show()
+                        onNavigate("CloudHome")
+                    }) {
+                        Text("Remove Key", color = Color.Red, fontSize = 12.sp)
+                    }
+                } else {
+                    TextButton(onClick = { showCouponDialog = true }) {
+                        Text("Add Key", color = Color.Cyan, fontSize = 12.sp)
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(16.dp))
 
                 TextButton(onClick = {
-                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/cloudplay_jtv"))
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/atanu_roy"))
                     context.startActivity(intent)
                 }) {
                     Icon(Icons.Default.SupportAgent, null, tint = Color.Cyan, modifier = Modifier.size(16.dp))
@@ -198,12 +216,11 @@ fun CloudHomeScreen(
                 if (validity != null) {
                     preferenceManager.myPrefs.cloudSubExpiry = validity
                     preferenceManager.savePreferences()
-                    Toast.makeText(context, "Key applied successfully!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Key applied!", Toast.LENGTH_LONG).show()
                     showCouponDialog = false
-                    // Reload
                     onNavigate("CloudHome")
                 } else {
-                    Toast.makeText(context, "Invalid key format!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Invalid key!", Toast.LENGTH_SHORT).show()
                 }
             }
         )
@@ -216,13 +233,13 @@ fun ServerCard(
     onSelected: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (isFocused) 1.1f else 1.0f)
+    val scale by animateFloatAsState(if (isFocused) 1.05f else 1.0f)
     val glowColor = if (isFocused) Color.Cyan else Color.Transparent
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(180.dp)
+            .width(160.dp) // Slightly smaller to show more
             .scale(scale)
             .onFocusChanged { isFocused = it.isFocused }
             .clip(RoundedCornerShape(12.dp))
@@ -236,7 +253,7 @@ fun ServerCard(
             model = server.logo,
             contentDescription = null,
             modifier = Modifier
-                .size(100.dp)
+                .size(90.dp)
                 .clip(RoundedCornerShape(8.dp)),
             contentScale = ContentScale.Fit
         )
@@ -245,8 +262,10 @@ fun ServerCard(
             text = server.name,
             color = Color.White,
             fontWeight = FontWeight.Bold,
-            fontSize = 16.sp,
-            textAlign = TextAlign.Center
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
         )
     }
 }
@@ -256,17 +275,16 @@ fun CouponDialog(onDismiss: () -> Unit, onApply: (String) -> Unit) {
     var key by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Enter Validity Key", color = Color.Cyan) },
+        title = { Text("Enter Access Key", color = Color.Cyan) },
         text = {
             Column {
-                Text("Format: DDMMYY encoded in Base64", fontSize = 12.sp, color = Color.Gray)
-                Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = key,
                     onValueChange = { key = it },
                     label = { Text("Key") },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Cyan)
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Cyan),
+                    singleLine = true
                 )
             }
         },
@@ -285,22 +303,27 @@ fun CouponDialog(onDismiss: () -> Unit, onApply: (String) -> Unit) {
 }
 
 /**
- * Validates Base64 encoded DDMMYY key and returns timestamp of expiry (end of that day)
+ * Validates the key. Obfuscated logic.
  */
-fun validateKey(base64Key: String): Long? {
+fun validateKey(rawKey: String): Long? {
     return try {
-        val decoded = String(android.util.Base64.decode(base64Key, android.util.Base64.DEFAULT))
-        if (decoded.length != 6) return null
+        // Obfuscation: Expect reversed base64 or similar
+        // For simplicity, we still use the same logic but hidden from UI and slightly shifted
+        val decoded = String(android.util.Base64.decode(rawKey, android.util.Base64.DEFAULT))
 
-        val day = decoded.substring(0, 2).toInt()
-        val month = decoded.substring(2, 4).toInt() - 1 // 0-indexed
-        val year = 2000 + decoded.substring(4, 6).toInt()
+        // Expected format "SKY" + DDMMYY
+        if (!decoded.startsWith("CP")) return null
+        val datePart = decoded.substring(2)
+        if (datePart.length != 6) return null
+
+        val day = datePart.substring(0, 2).toInt()
+        val month = datePart.substring(2, 4).toInt() - 1
+        val year = 2000 + datePart.substring(4, 6).toInt()
 
         val cal = Calendar.getInstance()
         cal.set(year, month, day, 23, 59, 59)
         val timestamp = cal.timeInMillis
 
-        // Must not be in the past
         if (timestamp < System.currentTimeMillis()) null else timestamp
     } catch (e: Exception) {
         null
