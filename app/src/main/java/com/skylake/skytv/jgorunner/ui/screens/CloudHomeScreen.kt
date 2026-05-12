@@ -119,7 +119,6 @@ fun CloudHomeScreen(
             if (servers.isEmpty()) {
                 CircularProgressIndicator(color = Color.Cyan)
             } else {
-                // Modified Server Row to show more servers / partial cards
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -200,9 +199,9 @@ fun CloudHomeScreen(
                     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/atanu_roy"))
                     context.startActivity(intent)
                 }) {
-                    Icon(Icons.Default.SupportAgent, null, tint = Color.Cyan, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.ShoppingCart, null, tint = Color.Cyan, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Support", color = Color.Cyan, fontSize = 12.sp)
+                    Text("Buy Subscription", color = Color.Cyan, fontSize = 12.sp)
                 }
             }
         }
@@ -239,7 +238,7 @@ fun ServerCard(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(160.dp) // Slightly smaller to show more
+            .width(160.dp)
             .scale(scale)
             .onFocusChanged { isFocused = it.isFocused }
             .clip(RoundedCornerShape(12.dp))
@@ -302,16 +301,10 @@ fun CouponDialog(onDismiss: () -> Unit, onApply: (String) -> Unit) {
     )
 }
 
-/**
- * Validates the key. Obfuscated logic.
- */
 fun validateKey(rawKey: String): Long? {
     return try {
-        // Obfuscation: Expect reversed base64 or similar
-        // For simplicity, we still use the same logic but hidden from UI and slightly shifted
         val decoded = String(android.util.Base64.decode(rawKey, android.util.Base64.DEFAULT))
 
-        // Expected format "SKY" + DDMMYY
         if (!decoded.startsWith("CP")) return null
         val datePart = decoded.substring(2)
         if (datePart.length != 6) return null
