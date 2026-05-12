@@ -91,7 +91,7 @@ fun CloudPlayerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Use the potentially filtered list from DataManager
+    // Use the correctly filtered list passed from the dashboard
     val activeList = remember { CloudDataManager.currentChannelList ?: cloudChannelList }
 
     var currentIndex by remember(initialIndex) { mutableIntStateOf(initialIndex) }
@@ -114,8 +114,8 @@ fun CloudPlayerScreen(
 
     val okHttpClient = remember {
         OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
+            .connectTimeout(25, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
@@ -165,14 +165,17 @@ fun CloudPlayerScreen(
 
         val finalUA = when {
             ch.userAgent != null && ch.userAgent != "@cloudplay" && ch.userAgent.isNotBlank() -> ch.userAgent
-            isJio || isAlex -> "JioTV/7.0.8 (Linux; Android 11; SM-G998B Build/RP1A.200720.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/122.0.6261.64 Mobile Safari/537.36"
+            isJio -> "JioTV/7.0.8 (Linux; Android 11; SM-G998B Build/RP1A.200720.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/122.0.6261.64 Mobile Safari/537.36"
+            isAlex -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
             else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         }
 
         val normalizedHeaders = mutableMapOf<String, String>()
         normalizedHeaders["User-Agent"] = finalUA
+        normalizedHeaders["Accept"] = "*/*"
+        normalizedHeaders["Connection"] = "keep-alive"
 
-        if (isJio || isAlex) {
+        if (isJio) {
             normalizedHeaders["os"] = "android"
             normalizedHeaders["devicetype"] = "phone"
             normalizedHeaders["uniqueId"] = androidId
@@ -181,13 +184,14 @@ fun CloudPlayerScreen(
             normalizedHeaders["versionCode"] = "323"
             normalizedHeaders["X-Jio-Network-Type"] = "WIFI"
             normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
+        }
 
-            if (isAlex) {
-                normalizedHeaders["Origin"] = "https://alex4528.site"
-                normalizedHeaders["Referer"] = "https://alex4528.site/"
-                normalizedHeaders["Sec-Fetch-Mode"] = "cors"
-                normalizedHeaders["Sec-Fetch-Site"] = "cross-site"
-            }
+        if (isAlex) {
+            normalizedHeaders["Origin"] = "https://alex4528.site"
+            normalizedHeaders["Referer"] = "https://alex4528.site/"
+            normalizedHeaders["Sec-Fetch-Mode"] = "cors"
+            normalizedHeaders["Sec-Fetch-Site"] = "same-origin"
+            normalizedHeaders["Sec-Fetch-Dest"] = "empty"
         }
 
         ch.headers?.forEach { (k, v) ->
@@ -583,16 +587,26 @@ fun CloudSettingsPanel(
 
             LazyColumn(modifier = Modifier.weight(1f)) {
                 item {
-                    SettingsToggleRefreshed("Autoplay Last played channel", preferenceManager.myPrefs.cloudAutoplayLastChannel) {
+                    var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayLastChannel) }
+                    SettingsToggleRefreshed("Autoplay Last played channel", checked) {
+                        checked = it
                         preferenceManager.myPrefs.cloudAutoplayLastChannel = it
                         preferenceManager.savePreferences()
                     }
                 }
                 item {
-                    SettingsToggleRefreshed("Focus Glow", preferenceManager.myPrefs.cloudFocusAnimationEnabled) {
+                    var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudFocusAnimationEnabled) }
+                    SettingsToggleRefreshed("Focus Glow", checked) {
+                        checked = it
                         preferenceManager.myPrefs.cloudFocusAnimationEnabled = it
                         preferenceManager.savePreferences()
                     }
+                }
+                item {
+                    SettingsActionItemCompact("Aspect Ratio", Icons.Default.AspectRatio) { /* Logic */ }
+                }
+                item {
+                    SettingsActionItemCompact("Playback Stats", Icons.Default.BarChart) { /* Logic */ }
                 }
                 item {
                     SettingsActionItemCompact("Playback Logs", Icons.Default.BugReport) { onLogClick() }
