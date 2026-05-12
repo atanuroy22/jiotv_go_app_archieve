@@ -7,28 +7,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.skylake.skytv.jgorunner.data.SkySharedPref
+import com.skylake.skytv.jgorunner.ui.components.BottomNavigationBar
 import com.skylake.skytv.jgorunner.ui.screens.CloudHomeScreen
 import com.skylake.skytv.jgorunner.ui.screens.CloudMainScreen
+import com.skylake.skytv.jgorunner.ui.screens.DebugScreen
+import com.skylake.skytv.jgorunner.ui.screens.SettingsScreen
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import com.skylake.skytv.jgorunner.ui.tvhome.Main_Layout
 import com.skylake.skytv.jgorunner.utils.LogCollector
+import com.skylake.skytv.jgorunner.core.update.ApplicationUpdater
 
 class MainActivity : ComponentActivity() {
     private lateinit var preferenceManager: SkySharedPref
@@ -44,12 +38,16 @@ class MainActivity : ComponentActivity() {
             var currentScreen by remember { mutableStateOf(targetScreen) }
             var selectedServer by remember { mutableStateOf<CloudServer?>(null) }
 
+            var isSwitchOnForAutoStartForeground by remember {
+                mutableStateOf(preferenceManager.myPrefs.autoStartOnBootForeground)
+            }
+
             Scaffold(
                 bottomBar = {
                     if (currentScreen != "CloudPlayer") {
-                        CloudBottomNavigation(
+                        BottomNavigationBar(
                             currentScreen = currentScreen,
-                            onTabSelected = { currentScreen = it }
+                            setCurrentScreen = { currentScreen = it }
                         )
                     }
                 }
@@ -77,50 +75,23 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                         "JioHome" -> Main_Layout(this@MainActivity, reloadTrigger = 0)
-                        "Settings" -> Box(modifier = Modifier.fillMaxSize()) {
-                            Text("Settings Placeholder", color = Color.White)
-                        }
+                        "Settings" -> SettingsScreen(
+                            activity = this@MainActivity,
+                            checkForUpdates = {
+                                // Placeholder for update check, original used ViewModel/Repository usually
+                            },
+                            onNavigate = { currentScreen = it },
+                            isSwitchOnForAutoStartForeground = isSwitchOnForAutoStartForeground,
+                            onAutoStartForegroundSwitch = {
+                                isSwitchOnForAutoStartForeground = it
+                                preferenceManager.myPrefs.autoStartOnBootForeground = it
+                                preferenceManager.savePreferences()
+                            }
+                        )
+                        "Debug" -> DebugScreen(this@MainActivity) { currentScreen = it }
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun CloudBottomNavigation(
-    currentScreen: String,
-    onTabSelected: (String) -> Unit
-) {
-    NavigationBar(
-        containerColor = Color(0xFF111111),
-        tonalElevation = 8.dp,
-        modifier = Modifier.height(60.dp)
-    ) {
-        val tabs = listOf(
-            Triple("Home", "CloudHome", Icons.Default.Home),
-            Triple("Jio", "JioHome", Icons.Default.Tv),
-            Triple("Settings", "Settings", Icons.Default.Settings)
-        )
-
-        tabs.forEach { (label, route, icon) ->
-            val isSelected = currentScreen == route || (route == "CloudHome" && currentScreen == "CloudMain")
-
-            var isFocused by remember { mutableStateOf(false) }
-
-            NavigationBarItem(
-                selected = isSelected,
-                onClick = { onTabSelected(route) },
-                icon = { Icon(icon, contentDescription = label, tint = if (isSelected || isFocused) Color.Cyan else Color.Gray) },
-                label = { Text(label, color = if (isSelected || isFocused) Color.Cyan else Color.Gray, fontSize = 10.sp) },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = Color.Cyan.copy(alpha = 0.1f)
-                ),
-                modifier = Modifier
-                    .onFocusChanged { isFocused = it.isFocused }
-                    .focusable()
-                    .clip(RoundedCornerShape(8.dp))
-            )
         }
     }
 }
