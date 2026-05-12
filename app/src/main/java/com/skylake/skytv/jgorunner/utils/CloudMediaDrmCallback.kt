@@ -40,6 +40,8 @@ class CloudMediaDrmCallback(
             licenseUrl = defaultLicenseUrl
         }
 
+        val isAlex = licenseUrl.contains("alex4528.site", true)
+
         val requestData = request.data
         val contentType = if (requestData.isNotEmpty() && requestData[0].toInt().toChar() == '{') {
             "application/json"
@@ -55,6 +57,15 @@ class CloudMediaDrmCallback(
             builder.header(k, v)
         }
 
+        if (isAlex) {
+            builder.header("Origin", "https://alex4528.site")
+            builder.header("Referer", "https://alex4528.site/")
+            builder.header("Sec-Fetch-Mode", "cors")
+            builder.header("Sec-Fetch-Site", "same-origin")
+            builder.header("Sec-Fetch-Dest", "empty")
+            builder.header("Accept", "*/*")
+        }
+
         if (!headers.containsKey("Content-Type")) {
             builder.header("Content-Type", contentType)
         }
@@ -68,11 +79,12 @@ class CloudMediaDrmCallback(
                 httpClient.newCall(okRequest).execute().use { response ->
                     val responseBodyBytes = response.body?.bytes() ?: throw Exception("Empty license response")
 
-                    if (response.code == 502 || response.code == 504 || response.code == 500) {
-                        LogCollector.log("DRM Server Temporary Error ${response.code}, retrying ($retryCount/5)...")
+                    // Retry on 502/504 AND 403 (alex server sometimes throws 403 on temporary load)
+                    if (response.code == 502 || response.code == 504 || response.code == 500 || (isAlex && response.code == 403)) {
+                        LogCollector.log("DRM Server Error ${response.code}, retrying ($retryCount/5)...")
                         retryCount++
-                        Thread.sleep(1000)
-                        return@use // continue loop
+                        Thread.sleep(1500)
+                        return@use // continues to next iteration of while loop
                     }
 
                     if (!response.isSuccessful) {
@@ -84,11 +96,14 @@ class CloudMediaDrmCallback(
                     return responseBodyBytes
                 }
             } catch (e: Exception) {
-                if (retryCount >= 4) throw e
+                if (retryCount >= 4) {
+                    LogCollector.log("DRM Request failed after all retries: ${e.message}")
+                    throw e
+                }
                 retryCount++
-                Thread.sleep(1000)
+                Thread.sleep(1500)
             }
         }
-        throw Exception("DRM Key Request failed after retries")
+        throw Exception("DRM Key Request failed after maximum retries")
     }
 }
