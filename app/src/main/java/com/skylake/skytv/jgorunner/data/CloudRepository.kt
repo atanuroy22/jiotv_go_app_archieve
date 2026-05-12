@@ -89,25 +89,6 @@ class CloudRepository(private val context: Context) {
             Log.e("CloudRepository", "Local M3U fetch failed", e)
         }
 
-        // Fallback to JSON if M3U fails or is not present
-        try {
-            val jsonUrl = url.replace("playlist.m3u", "channels.json")
-            val request = Request.Builder().url(jsonUrl).build()
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val body = response.body?.string() ?: ""
-                    // Try parsing as List<CloudChannel> first
-                    try {
-                        val type = object : TypeToken<List<CloudChannel>>() {}.type
-                        return@use gson.fromJson<List<CloudChannel>>(body, type) ?: emptyList<CloudChannel>()
-                    } catch (_: Exception) {
-                        // If it's the standard binary JSON, it might need manual mapping
-                        Log.d("CloudRepository", "Local JSON parse failed, trying manual mapping")
-                    }
-                }
-            }
-        } catch (_: Exception) {}
-
         emptyList()
     }
 
@@ -129,30 +110,31 @@ class CloudRepository(private val context: Context) {
                 currentLogo = line.substringAfter("tvg-logo=\"").substringBefore("\"")
                 currentGroup = line.substringAfter("group-title=\"").substringBefore("\"")
 
-                // Improved language extraction
                 val langMatch = Regex("""tvg-language="([^"]+)"""").find(line) ?: Regex("""language="([^"]+)"""").find(line)
                 val langTag = langMatch?.groupValues?.get(1)
 
                 if (!langTag.isNullOrBlank()) {
                     currentLanguage = langTag
                 } else {
-                    // Multi-language detection from name
                     val found = indianLanguages.filter { currentName.contains(it, ignoreCase = true) }
                     currentLanguage = if (found.isNotEmpty()) found.distinct().joinToString(", ") else "Hindi"
                 }
 
             } else if (line.trim().startsWith("http")) {
-                val channelUrl = line.trim()
+                val m3u8Url = line.trim()
+                // Convert m3u8 to mpd for localhost channels to support Full HD
+                val mpdUrl = m3u8Url.replace(".m3u8", ".mpd").replace(".m3u", ".mpd")
+
                 list.add(CloudChannel(
-                    type = if (channelUrl.contains(".mpd")) "dash" else "hls",
-                    id = channelUrl.hashCode().toString(),
+                    type = "dash", // Default to DASH for localhost
+                    id = m3u8Url.hashCode().toString(),
                     name = currentName.trim(),
                     group = if (currentGroup.isBlank()) "General" else currentGroup.trim(),
                     language = currentLanguage.trim(),
                     logo = if (currentLogo.startsWith("http")) currentLogo else "$baseServerUrl/jtvimage/$currentLogo",
                     userAgent = "JioTV",
-                    mpdUrl = if (channelUrl.contains(".mpd")) channelUrl else null,
-                    m3u8Url = if (!channelUrl.contains(".mpd")) channelUrl else null,
+                    mpdUrl = mpdUrl,
+                    m3u8Url = m3u8Url,
                     licenseUrl = null,
                     headers = null,
                     expiresIn = null
