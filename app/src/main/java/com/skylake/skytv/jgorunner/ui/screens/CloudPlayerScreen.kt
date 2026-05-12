@@ -120,6 +120,9 @@ fun CloudPlayerScreen(
     var showNumericOverlay by remember { mutableStateOf(false) }
     var numericJob by remember { mutableStateOf<Job?>(null) }
 
+    // State to track if we are currently attempting a fallback from MPD to HLS
+    var isFallbackAttempt by remember(currentIndex) { mutableStateOf(false) }
+
     val okHttpClient = remember {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -134,6 +137,23 @@ fun CloudPlayerScreen(
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
                         LogCollector.logError("CloudPlayer Error: ${error.errorCodeName} - ${error.message}", error)
+
+                        // Check if we should fallback from MPD to HLS
+                        if (!isFallbackAttempt && activeCloudChannel?.m3u8Url != null &&
+                            (error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ||
+                             error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS)) {
+
+                            LogCollector.log("DASH playback failed, falling back to HLS for ${activeCloudChannel?.name}")
+                            isFallbackAttempt = true
+                            playerError = "DASH failed, trying HLS..."
+
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                playerError = null
+                                // The LaunchedEffect(currentIndex, isFallbackAttempt) will handle the switch
+                            }, 1000)
+                            return
+                        }
+
                         playerError = "${error.errorCodeName}\n${error.message}"
 
                         if (retryCountRef.value < 5) {
@@ -150,7 +170,6 @@ fun CloudPlayerScreen(
                             retryCountRef.value = 0
                             playerError = null
 
-                            // Save per-server last played
                             activeCloudChannel?.let { ch ->
                                 if (!ch.id.isNullOrBlank() && serverUrl != null) {
                                     val mapJson = preferenceManager.myPrefs.lastCloudPlayedChannelId ?: "{}"
@@ -169,7 +188,7 @@ fun CloudPlayerScreen(
             }
     }
 
-    LaunchedEffect(currentIndex) {
+    LaunchedEffect(currentIndex, isFallbackAttempt) {
         val ch = activeList.getOrNull(currentIndex)
         if (ch == null) return@LaunchedEffect
 
@@ -228,16 +247,20 @@ fun CloudPlayerScreen(
         playerError = null
         retryCountRef.value = 0
 
-        val playbackUrl = ch.mpdUrl ?: ch.m3u8Url ?: ""
+        // Use HLS if isFallbackAttempt is true, otherwise prefer MPD
+        val playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
+
         if (playbackUrl.isNotBlank()) {
             val normalized = normalizePlaybackUrl(context, playbackUrl)
-            LogCollector.log("Preparing Cloud Player: ${ch.name} -> $normalized")
+            LogCollector.log("Preparing Cloud Player: ${ch.name} -> $normalized (${if (isFallbackAttempt) "Fallback HLS" else "Primary"})")
 
             val builder = MediaItem.Builder()
                 .setUri(normalized.toUri())
                 .setMediaId(ch.id ?: "")
 
-            val isDash = normalized.contains(".mpd") || ch.type == "dash"
+            // Determine type based on URL and current fallback state
+            val isDash = !isFallbackAttempt && (normalized.contains(".mpd") || ch.type == "dash")
+
             if (isDash) {
                 builder.setMimeType(MimeTypes.APPLICATION_MPD)
             } else if (normalized.contains(".m3u8")) {
@@ -247,7 +270,7 @@ fun CloudPlayerScreen(
             val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             dataSourceFactory.setDefaultRequestProperties(normalizedHeaders)
 
-            if (!ch.licenseUrl.isNullOrBlank()) {
+            if (!ch.licenseUrl.isNullOrBlank() && !isFallbackAttempt) {
                 LogCollector.log("Configuring DRM: ${ch.licenseUrl}")
 
                 val isClearKey = ch.licenseUrl.contains("plkey.php", true) ||
@@ -256,7 +279,6 @@ fun CloudPlayerScreen(
                                 ch.type?.contains("clearkey", true) == true
 
                 val drmUuid = if (isClearKey) C.CLEARKEY_UUID else C.WIDEVINE_UUID
-                LogCollector.log("Using DRM UUID: $drmUuid (${if (isClearKey) "ClearKey" else "Widevine"})")
 
                 builder.setDrmConfiguration(
                     MediaItem.DrmConfiguration.Builder(drmUuid)
