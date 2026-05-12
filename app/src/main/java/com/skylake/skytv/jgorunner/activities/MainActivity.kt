@@ -3,23 +3,17 @@ package com.skylake.skytv.jgorunner.activities
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.ConnectivityManager
-import android.net.LinkProperties
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.PowerManager
-import android.os.Process
 import android.provider.Settings
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
@@ -27,21 +21,16 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.skylake.skytv.jgorunner.BuildConfig
-import com.skylake.skytv.jgorunner.activities.setup_wizard.SetupWizardActivity
 import com.skylake.skytv.jgorunner.core.checkServerStatus
-import com.skylake.skytv.jgorunner.core.data.JTVConfigurationManager
 import com.skylake.skytv.jgorunner.core.execution.runBinary
 import com.skylake.skytv.jgorunner.core.execution.stopBinary
 import com.skylake.skytv.jgorunner.core.update.ApplicationUpdater
@@ -60,9 +49,7 @@ import com.skylake.skytv.jgorunner.ui.components.LoginPopup
 import com.skylake.skytv.jgorunner.ui.components.ProgressPopup
 import com.skylake.skytv.jgorunner.ui.components.RedirectPopup
 import com.skylake.skytv.jgorunner.ui.screens.*
-import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
-import com.skylake.skytv.jgorunner.ui.tvhome.Main_Layout
 import com.skylake.skytv.jgorunner.ui.theme.JGOTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -75,7 +62,6 @@ import java.io.File
 import java.net.Inet4Address
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import kotlin.system.exitProcess
 
 class MainActivity : ComponentActivity() {
 
@@ -307,9 +293,16 @@ class MainActivity : ComponentActivity() {
                                 checkForUpdates = { checkForUpdates(true) },
                                 onNavigate = { currentScreen = it },
                                 isSwitchOnForAutoStartForeground = isSwitchOnForAutoStartForeground,
-                                onAutoStartForegroundSwitch = {
-                                    if (it) requestOverlayPermission()
-                                    else {
+                                onAutoStartForegroundSwitch = { checked: Boolean ->
+                                    if (checked) {
+                                        if (checkOverlayPermission()) {
+                                            preferenceManager.myPrefs.autoStartOnBootForeground = true
+                                            preferenceManager.savePreferences()
+                                            isSwitchOnForAutoStartForeground = true
+                                        } else {
+                                            requestOverlayPermission()
+                                        }
+                                    } else {
                                         preferenceManager.myPrefs.autoStartOnBootForeground = false
                                         preferenceManager.savePreferences()
                                         isSwitchOnForAutoStartForeground = false
@@ -355,7 +348,6 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                         LoginScreenPop(showLoginPopupD, { showLoginPopupD = false }, this@MainActivity)
-
                         CustPopup(
                             isVisible = showBinaryUpdatePopup,
                             title = "Binary Update Available",
@@ -535,7 +527,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun getPublicJTVServerURL(context: Context): String {
-        val cm = context.getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val port = preferenceManager.myPrefs.jtvGoServerPort
         if (preferenceManager.myPrefs.serveLocal) return "http://localhost:$port/playlist.m3u"
         val net = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) cm.activeNetwork else cm.allNetworks.firstOrNull()

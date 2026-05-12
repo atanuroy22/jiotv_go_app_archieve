@@ -165,7 +165,6 @@ fun normalizePlaybackUrl(context: Context, inputUrl: String): String {
 
     val parsedAfterQuality = runCatching { Uri.parse(url) }.getOrNull()
     val path = parsedAfterQuality?.encodedPath.orEmpty()
-
     // Fixed: Don't append .m3u8 if it's already an MPD or DASH stream
     if (path.contains("/live/", ignoreCase = true) &&
         !path.endsWith(".m3u8", ignoreCase = true) &&
