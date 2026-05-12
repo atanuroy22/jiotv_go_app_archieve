@@ -125,7 +125,7 @@ fun CloudMainScreen(
 
     LaunchedEffect(currentServer) {
         currentServer?.let { server ->
-            isSidebarVisible = false
+            isSidebarVisible = false // Auto-collapse on server selection
             channels = emptyList()
             isLoadingChannels = true
             errorMessage = null
@@ -142,16 +142,15 @@ fun CloudMainScreen(
             }
 
             if (channels.isNotEmpty()) {
-                if (preferenceManager.myPrefs.cloudAutoplayFirstChannel) {
+                val lastId = if (preferenceManager.myPrefs.cloudAutoplayLastChannel) preferenceManager.myPrefs.lastCloudPlayedChannelId else null
+                val lastChannel = if (lastId != null) channels.find { it.id == lastId } else null
+
+                if (lastChannel != null) {
                     CloudDataManager.currentChannelList = filteredChannels
-                    onPlayChannel(channels.first(), channels)
-                } else if (preferenceManager.myPrefs.cloudAutoplayLastChannel) {
-                    val lastId = preferenceManager.myPrefs.lastCloudPlayedChannelId
-                    val lastChannel = channels.find { it.id == lastId }
-                    lastChannel?.let {
-                        CloudDataManager.currentChannelList = filteredChannels
-                        onPlayChannel(it, channels)
-                    }
+                    onPlayChannel(lastChannel, filteredChannels)
+                } else if (preferenceManager.myPrefs.cloudAutoplayFirstChannel) {
+                    CloudDataManager.currentChannelList = filteredChannels
+                    onPlayChannel(channels.first(), filteredChannels)
                 }
             }
         }
@@ -170,7 +169,7 @@ fun CloudMainScreen(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A0A))
+            .background(Color(0xFF050505))
     ) {
         // Sidebar
         AnimatedVisibility(
@@ -182,16 +181,17 @@ fun CloudMainScreen(
                 // Servers
                 Column(
                     modifier = Modifier
-                        .width(170.dp)
+                        .width(160.dp)
                         .fillMaxHeight()
-                        .background(Color(0xFF141414))
+                        .background(Color(0xFF101010))
                         .padding(4.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
-                        Text("Servers", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         IconButton(onClick = { isSidebarVisible = false }, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.Close, "Collapse", tint = Color.Red, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Close, "Collapse", tint = Color.Red, modifier = Modifier.size(20.dp))
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Servers", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
                     Box(modifier = Modifier.weight(1f)) {
                         LazyColumn {
@@ -211,19 +211,23 @@ fun CloudMainScreen(
                     modifier = Modifier
                         .width(180.dp)
                         .fillMaxHeight()
-                        .background(Color(0xFF1C1C1C))
+                        .background(Color(0xFF181818))
                         .padding(4.dp)
                 ) {
                     Text("Settings", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
                     LazyColumn(modifier = Modifier.weight(1f)) {
                         item {
-                            SettingsToggleRefreshed("Autoplay First", preferenceManager.myPrefs.cloudAutoplayFirstChannel) {
+                            var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayFirstChannel) }
+                            SettingsToggleRefreshed("Autoplay First", checked) {
+                                checked = it
                                 preferenceManager.myPrefs.cloudAutoplayFirstChannel = it
                                 preferenceManager.savePreferences()
                             }
                         }
                         item {
-                            SettingsToggleRefreshed("Autoplay Last", preferenceManager.myPrefs.cloudAutoplayLastChannel) {
+                            var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayLastChannel) }
+                            SettingsToggleRefreshed("Autoplay Last", checked) {
+                                checked = it
                                 preferenceManager.myPrefs.cloudAutoplayLastChannel = it
                                 preferenceManager.savePreferences()
                             }
@@ -283,7 +287,7 @@ fun CloudMainScreen(
             }
         }
 
-        // Search Panel
+        // Search Panel (Expanded inline)
         AnimatedVisibility(
             visible = isSearchVisible,
             enter = expandHorizontally() + fadeIn(),
@@ -293,9 +297,11 @@ fun CloudMainScreen(
                 modifier = Modifier
                     .width(220.dp)
                     .fillMaxHeight()
-                    .background(Color(0xFF222222))
-                    .padding(8.dp)
+                    .background(Color(0xFF202020))
+                    .padding(12.dp)
             ) {
+                Text("Search Channels", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -306,26 +312,36 @@ fun CloudMainScreen(
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, "Clear", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Backspace, "Clear", tint = Color.Gray, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                Button(
-                    onClick = {
-                        if (searchQuery.isNotEmpty()) searchQuery = "" else isSearchVisible = false
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
-                    shape = RoundedCornerShape(4.dp)
-                ) {
-                    Text(if (searchQuery.isNotEmpty()) "Clear Search" else "Close Search", fontSize = 12.sp)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { searchQuery = "" },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                        shape = RoundedCornerShape(4.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("Clear", fontSize = 11.sp)
+                    }
+                    Button(
+                        onClick = { isSearchVisible = false },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333)),
+                        shape = RoundedCornerShape(4.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("Close", fontSize = 11.sp)
+                    }
                 }
 
-                Text("Found ${filteredChannels.size}", color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
+                Text("Results: ${filteredChannels.size}", color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(top = 12.dp))
             }
         }
 
@@ -372,7 +388,7 @@ fun CloudMainScreen(
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 90.dp),
+                    columns = GridCells.Adaptive(minSize = 80.dp),
                     contentPadding = PaddingValues(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -422,46 +438,64 @@ fun CloudMainScreen(
 }
 
 @Composable
-fun LogViewerDialog(onDismiss: () -> Unit, onCopy: () -> Unit) {
-    var logs by remember { mutableStateOf(LogCollector.getLogs()) }
+fun SettingsToggleRefreshed(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    var localChecked by remember(checked) { mutableStateOf(checked) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().onFocusChanged { isFocused = it.isFocused }.focusable()
+            .clickable { localChecked = !localChecked; onCheckedChange(localChecked) }.padding(horizontal = 8.dp, vertical = 4.dp)
+            .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(4.dp))
+            .padding(4.dp)
+    ) {
+        Text(label, color = if (isFocused) Color.Cyan else Color.White, modifier = Modifier.weight(1f), fontSize = 11.sp)
+        Switch(checked = localChecked, onCheckedChange = { localChecked = it; onCheckedChange(it) }, colors = SwitchDefaults.colors(checkedThumbColor = Color.Cyan), modifier = Modifier.scale(0.6f))
+    }
+}
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Debug Logs")
-                IconButton(onClick = { LogCollector.clear(); logs = "" }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Clear Logs", tint = Color.Red)
+@Composable
+fun SettingsActionItemCompact(label: String, icon: ImageVector, onClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().onFocusChanged { isFocused = it.isFocused }.focusable()
+            .clickable { onClick() }.padding(horizontal = 8.dp, vertical = 4.dp)
+            .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(4.dp))
+            .padding(6.dp)
+    ) {
+        Icon(icon, null, tint = if (isFocused) Color.Cyan else Color.White, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(label, color = if (isFocused) Color.Cyan else Color.White, fontSize = 11.sp)
+    }
+}
+
+@Composable
+fun ChannelGridItemCompact(channel: CloudChannel, onSelected: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (isFocused) 1.08f else 1.0f)
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(80.dp).scale(scale).onFocusChanged { isFocused = it.isFocused }.focusable().clickable { onSelected() }
+            .onPreviewKeyEvent {
+                if (it.nativeKeyEvent.action == KeyEvent.ACTION_UP && (it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER || it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER)) {
+                    onSelected(); true
+                } else false
+            }
+    ) {
+        Box(
+            modifier = Modifier.aspectRatio(16f/9f).clip(RoundedCornerShape(6.dp)).background(Color.DarkGray)
+                .border(width = 2.dp, color = if (isFocused) Color.Cyan else Color.Transparent, shape = RoundedCornerShape(6.dp))
+        ) {
+            AsyncImage(model = channel.logo, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(4.dp))
+            if (channel.name.contains("HD", true)) {
+                Surface(color = Color.Red, shape = RoundedCornerShape(2.dp), modifier = Modifier.align(Alignment.TopEnd).padding(2.dp)) {
+                    Text("HD", color = Color.White, fontSize = 6.sp, modifier = Modifier.padding(horizontal = 2.dp))
                 }
             }
-        },
-        text = {
-            Column {
-                Text(
-                    text = if (logs.isEmpty()) "No logs found." else logs,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 300.dp)
-                        .verticalScroll(rememberScrollState()),
-                    fontSize = 12.sp,
-                    color = Color.LightGray
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = onCopy) { Text("Copy to Clipboard") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        },
-        containerColor = Color(0xFF1E1E1E),
-        titleContentColor = Color.White,
-        textContentColor = Color.White
-    )
+        }
+        Text(text = channel.name, color = if (isFocused) Color.Cyan else Color.White, fontSize = 9.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 10.sp, modifier = Modifier.padding(top = 2.dp))
+    }
 }
 
 @Composable
@@ -504,62 +538,44 @@ fun ServerListItem(
 }
 
 @Composable
-fun SettingsToggleRefreshed(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    var isFocused by remember { mutableStateOf(false) }
-    var localChecked by remember(checked) { mutableStateOf(checked) }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().onFocusChanged { isFocused = it.isFocused }.focusable()
-            .clickable { localChecked = !localChecked; onCheckedChange(localChecked) }.padding(horizontal = 8.dp, vertical = 4.dp)
-            .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(4.dp))
-            .padding(4.dp)
-    ) {
-        Text(label, color = if (isFocused) Color.Cyan else Color.White, modifier = Modifier.weight(1f), fontSize = 11.sp)
-        Switch(checked = localChecked, onCheckedChange = { localChecked = it; onCheckedChange(it) }, colors = SwitchDefaults.colors(checkedThumbColor = Color.Cyan), modifier = Modifier.scale(0.6f))
-    }
-}
+fun LogViewerDialog(onDismiss: () -> Unit, onCopy: () -> Unit) {
+    var logs by remember { mutableStateOf(LogCollector.getLogs()) }
 
-@Composable
-fun SettingsActionItemCompact(label: String, icon: ImageVector, onClick: () -> Unit) {
-    var isFocused by remember { mutableStateOf(false) }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().onFocusChanged { isFocused = it.isFocused }.focusable()
-            .clickable { onClick() }.padding(horizontal = 8.dp, vertical = 4.dp)
-            .background(if (isFocused) Color.White.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(4.dp))
-            .padding(6.dp)
-    ) {
-        Icon(icon, null, tint = if (isFocused) Color.Cyan else Color.White, modifier = Modifier.size(14.dp))
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(label, color = if (isFocused) Color.Cyan else Color.White, fontSize = 11.sp)
-    }
-}
-
-@Composable
-fun ChannelGridItemCompact(channel: CloudChannel, onSelected: () -> Unit) {
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (isFocused) 1.08f else 1.0f)
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(90.dp).scale(scale).onFocusChanged { isFocused = it.isFocused }.focusable().clickable { onSelected() }
-            .onPreviewKeyEvent {
-                if (it.nativeKeyEvent.action == KeyEvent.ACTION_UP && (it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_ENTER || it.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_CENTER)) {
-                    onSelected(); true
-                } else false
-            }
-    ) {
-        Box(
-            modifier = Modifier.aspectRatio(16f/9f).clip(RoundedCornerShape(6.dp)).background(Color.DarkGray)
-                .border(width = 2.dp, color = if (isFocused) Color.Cyan else Color.Transparent, shape = RoundedCornerShape(6.dp))
-        ) {
-            AsyncImage(model = channel.logo, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(4.dp))
-            if (channel.name.contains("HD", true)) {
-                Surface(color = Color.Red, shape = RoundedCornerShape(2.dp), modifier = Modifier.align(Alignment.TopEnd).padding(2.dp)) {
-                    Text("HD", color = Color.White, fontSize = 6.sp, modifier = Modifier.padding(horizontal = 2.dp))
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Debug Logs")
+                IconButton(onClick = { LogCollector.clear(); logs = "" }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Clear Logs", tint = Color.Red)
                 }
             }
-        }
-        Text(text = channel.name, color = if (isFocused) Color.Cyan else Color.White, fontSize = 9.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 10.sp, modifier = Modifier.padding(top = 2.dp))
-    }
+        },
+        text = {
+            Column {
+                Text(
+                    text = if (logs.isEmpty()) "No logs found." else logs,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp)
+                        .verticalScroll(rememberScrollState()),
+                    fontSize = 12.sp,
+                    color = Color.LightGray
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onCopy) { Text("Copy to Clipboard") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+        containerColor = Color(0xFF1E1E1E),
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
 }

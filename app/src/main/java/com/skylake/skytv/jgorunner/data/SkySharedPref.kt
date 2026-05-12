@@ -232,6 +232,7 @@ class SkySharedPref(context: Context) {
         @SharedPrefKey("cachedReleaseUrl") var cachedReleaseUrl: String? = null,
         @SharedPrefKey("cachedReleaseSize") var cachedReleaseSize: Long = 0L,
 
+        @SharedPrefKey("cloud_sub_expiry") var cloudSubExpiry: Long = 0L,
 
         )
 
