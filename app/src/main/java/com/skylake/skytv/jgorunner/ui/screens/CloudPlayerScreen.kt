@@ -62,6 +62,7 @@ import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
 import androidx.media3.exoplayer.drm.FrameworkMediaDrm
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.google.gson.Gson
@@ -122,6 +123,8 @@ fun CloudPlayerScreen(
 
     var isFallbackAttempt by remember(currentIndex) { mutableStateOf(false) }
     var isSilentTransition by remember(currentIndex) { mutableStateOf(false) }
+
+    var currentResizeMode by remember { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
 
     val okHttpClient = remember {
         OkHttpClient.Builder()
@@ -443,9 +446,13 @@ fun CloudPlayerScreen(
                     setKeepContentOnPlayerReset(true)
                     player = exoPlayer
                     exoPlayerView = this
+                    resizeMode = currentResizeMode
                 }
             },
-            update = { it.player = exoPlayer },
+            update = {
+                it.player = exoPlayer
+                it.resizeMode = currentResizeMode
+            },
             modifier = Modifier.fillMaxSize()
         )
 
@@ -506,6 +513,8 @@ fun CloudPlayerScreen(
             CloudSettingsPanel(
                 preferenceManager = preferenceManager,
                 focusRequester = settingsPanelFocusRequester,
+                currentResizeMode = currentResizeMode,
+                onResizeModeChange = { currentResizeMode = it },
                 onClose = {
                     showSettingsPanel = false
                     rootFocusRequester.requestFocus()
@@ -691,9 +700,19 @@ fun CloudSidePanel(
 fun CloudSettingsPanel(
     preferenceManager: SkySharedPref,
     focusRequester: FocusRequester,
+    currentResizeMode: Int,
+    onResizeModeChange: (Int) -> Unit,
     onClose: () -> Unit,
     onLogClick: () -> Unit
 ) {
+    val modes = listOf(
+        "Fit" to AspectRatioFrameLayout.RESIZE_MODE_FIT,
+        "Fill" to AspectRatioFrameLayout.RESIZE_MODE_FILL,
+        "Zoom" to AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+        "Fixed Width" to AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH,
+        "Fixed Height" to AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
+    )
+
     Box(modifier = Modifier.fillMaxHeight().width(280.dp).background(Color.Black.copy(alpha = 0.85f)).padding(16.dp)) {
         Column {
             Text("Player Settings", color = Color.Cyan, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
@@ -716,7 +735,12 @@ fun CloudSettingsPanel(
                     }
                 }
                 item {
-                    SettingsActionItemCompact("Aspect Ratio", Icons.Default.AspectRatio, modifier = Modifier.focusRequester(focusRequester)) { /* Logic */ }
+                    val currentLabel = modes.find { it.second == currentResizeMode }?.first ?: "Fit"
+                    SettingsActionItemCompact("Aspect Ratio: $currentLabel", Icons.Default.AspectRatio, modifier = Modifier.focusRequester(focusRequester)) {
+                        val currentIndex = modes.indexOfFirst { it.second == currentResizeMode }
+                        val nextIndex = (currentIndex + 1) % modes.size
+                        onResizeModeChange(modes[nextIndex].second)
+                    }
                 }
                 item {
                     SettingsActionItemCompact("Playback Stats", Icons.Default.BarChart) { /* Logic */ }
