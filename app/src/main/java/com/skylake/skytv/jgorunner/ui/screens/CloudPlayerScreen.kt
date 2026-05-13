@@ -120,7 +120,6 @@ fun CloudPlayerScreen(
     var showNumericOverlay by remember { mutableStateOf(false) }
     var numericJob by remember { mutableStateOf<Job?>(null) }
 
-    // Unified state for fallbacks and silent transitions
     var isFallbackAttempt by remember(currentIndex) { mutableStateOf(false) }
     var isSilentTransition by remember(currentIndex) { mutableStateOf(false) }
 
@@ -139,19 +138,16 @@ fun CloudPlayerScreen(
                     override fun onPlayerError(error: PlaybackException) {
                         LogCollector.logError("CloudPlayer Error: ${error.errorCodeName} - ${error.message}", error)
 
-                        // Silent DASH-to-HLS fallback trigger
                         if (!isFallbackAttempt && activeCloudChannel?.m3u8Url != null &&
                             (error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ||
                              error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS)) {
 
-                            LogCollector.log("DASH error, silently falling back to HLS for ${activeCloudChannel?.name}")
+                            LogCollector.log("Primary stream error, trying alternate URL for ${activeCloudChannel?.name}")
                             isFallbackAttempt = true
                             isSilentTransition = true
-                            // No playerError set here to keep UI clean
                             return
                         }
 
-                        // Only show error if we aren't in a silent transition
                         if (!isSilentTransition) {
                             playerError = "${error.errorCodeName}\n${error.message}"
                         }
@@ -169,7 +165,7 @@ fun CloudPlayerScreen(
                         if (state == Player.STATE_READY) {
                             retryCountRef.value = 0
                             playerError = null
-                            isSilentTransition = false // Transition complete
+                            isSilentTransition = false
 
                             activeCloudChannel?.let { ch ->
                                 if (!ch.id.isNullOrBlank() && serverUrl != null) {
@@ -252,13 +248,13 @@ fun CloudPlayerScreen(
 
         if (playbackUrl.isNotBlank()) {
             val normalized = normalizePlaybackUrl(context, playbackUrl)
-            LogCollector.log("Preparing Cloud Player: ${ch.name} -> $normalized (${if (isFallbackAttempt) "HLS Fallback" else "Primary"})")
+            LogCollector.log("Preparing Cloud Player: ${ch.name} -> $normalized")
 
             val builder = MediaItem.Builder()
                 .setUri(normalized.toUri())
                 .setMediaId(ch.id ?: "")
 
-            val isDash = !isFallbackAttempt && (normalized.contains(".mpd") || ch.type == "dash")
+            val isDash = !isFallbackAttempt && (normalized.contains(".mpd") || normalized.contains("/play/") || ch.type == "dash")
 
             if (isDash) {
                 builder.setMimeType(MimeTypes.APPLICATION_MPD)
@@ -453,14 +449,10 @@ fun CloudPlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Silent indicator for fallback or initial loading
+        // Subtle indicator for fallback or initial loading
         if (isSilentTransition) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Color.Cyan, modifier = Modifier.size(32.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Optimizing Quality...", color = Color.Cyan, fontSize = 12.sp)
-                }
+                CircularProgressIndicator(color = Color.Cyan, modifier = Modifier.size(32.dp))
             }
         }
 

@@ -74,7 +74,6 @@ class CloudRepository(private val context: Context) {
     }
 
     private suspend fun fetchLocalChannels(url: String): List<CloudChannel> = withContext(Dispatchers.IO) {
-        // Try to fetch as M3U first for localhost as it's the most reliable source for metadata in the current binary
         try {
             val request = Request.Builder().url(url).build()
             client.newCall(request).execute().use { response ->
@@ -110,23 +109,15 @@ class CloudRepository(private val context: Context) {
                 currentLogo = line.substringAfter("tvg-logo=\"").substringBefore("\"")
                 currentGroup = line.substringAfter("group-title=\"").substringBefore("\"")
 
-                val langMatch = Regex("""tvg-language="([^"]+)"""").find(line) ?: Regex("""language="([^"]+)"""").find(line)
-                val langTag = langMatch?.groupValues?.get(1)
-
-                if (!langTag.isNullOrBlank()) {
-                    currentLanguage = langTag
-                } else {
-                    val found = indianLanguages.filter { currentName.contains(it, ignoreCase = true) }
-                    currentLanguage = if (found.isNotEmpty()) found.distinct().joinToString(", ") else "Hindi"
-                }
+                // Detection logic
+                val found = indianLanguages.filter { currentName.contains(it, ignoreCase = true) }
+                currentLanguage = if (found.isNotEmpty()) found.distinct().joinToString(", ") else "Hindi"
 
             } else if (line.trim().startsWith("http")) {
                 val m3u8Url = line.trim()
-                // Convert m3u8 to mpd for localhost channels to support Full HD
                 val mpdUrl = m3u8Url.replace(".m3u8", ".mpd").replace(".m3u", ".mpd")
-
                 list.add(CloudChannel(
-                    type = "dash", // Default to DASH for localhost
+                    type = "dash",
                     id = m3u8Url.hashCode().toString(),
                     name = currentName.trim(),
                     group = if (currentGroup.isBlank()) "General" else currentGroup.trim(),

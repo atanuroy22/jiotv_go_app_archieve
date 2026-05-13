@@ -13,6 +13,9 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -49,18 +52,15 @@ fun CloudHomeScreen(
 ) {
     val preferenceManager = SkySharedPref.getInstance(context)
     val repository = remember { CloudRepository(context) }
-
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var countdown by remember { mutableIntStateOf(5) }
     var isAutoplayActive by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayEnabled) }
     var showCouponDialog by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
 
     var refreshTrigger by remember { mutableIntStateOf(0) }
-
-    val subExpiry = remember(refreshTrigger) { preferenceManager.myPrefs.cloudSubExpiry }
-    val isSubscribed = remember(subExpiry) { subExpiry > System.currentTimeMillis() }
-
-    val focusRequester = remember { FocusRequester() }
+    val subExpiry = preferenceManager.myPrefs.cloudSubExpiry
+    val isSubscribed = subExpiry > System.currentTimeMillis()
 
     LaunchedEffect(refreshTrigger) {
         val fetched = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
@@ -69,7 +69,6 @@ fun CloudHomeScreen(
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
             logo = "https://iili.io/f1zkPwP.md.png"
         )
-
         servers = if (isSubscribed) {
             fetched + freeJio
         } else {
@@ -81,9 +80,10 @@ fun CloudHomeScreen(
         if (isAutoplayActive && servers.isNotEmpty()) {
             while (countdown > 0) {
                 delay(1000)
+                if (!isAutoplayActive) break
                 countdown--
             }
-            if (countdown == 0) {
+            if (countdown == 0 && isAutoplayActive) {
                 onServerSelected(servers.first())
             }
         }
@@ -115,16 +115,18 @@ fun CloudHomeScreen(
                 text = "Select a server to start streaming",
                 fontSize = 14.sp,
                 color = Color.Gray,
-                modifier = Modifier.padding(top = 4.dp, bottom = 40.dp)
+                modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
             )
 
             if (servers.isEmpty()) {
                 CircularProgressIndicator(color = Color.Cyan)
             } else {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp),
-                    modifier = Modifier.focusRequester(focusRequester).fillMaxWidth()
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 150.dp),
+                    contentPadding = PaddingValues(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.weight(1f).focusRequester(focusRequester)
                 ) {
                     items(servers) { server ->
                         ServerCard(
@@ -135,16 +137,6 @@ fun CloudHomeScreen(
                             }
                         )
                     }
-                    if (servers.size > 1) {
-                        item {
-                            Box(modifier = Modifier.width(60.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.ChevronRight, null, tint = Color.Cyan, modifier = Modifier.size(32.dp))
-                                    Text("More", color = Color.Gray, fontSize = 10.sp)
-                                }
-                            }
-                        }
-                    }
                 }
 
                 LaunchedEffect(Unit) {
@@ -152,8 +144,6 @@ fun CloudHomeScreen(
                     try { focusRequester.requestFocus() } catch(_: Exception) {}
                 }
             }
-
-            Spacer(modifier = Modifier.weight(1f))
 
             if (isAutoplayActive && servers.isNotEmpty()) {
                 Text(
@@ -164,7 +154,6 @@ fun CloudHomeScreen(
                 )
             }
 
-            // Footer info
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
@@ -175,14 +164,12 @@ fun CloudHomeScreen(
                 } else {
                     "Free Mode (Local Jio enabled)"
                 }
-
                 Text(
                     text = expiryText,
                     color = if (isSubscribed) Color.Green else Color.Yellow,
                     fontSize = 12.sp,
                     modifier = Modifier.weight(1f)
                 )
-
                 if (isSubscribed) {
                     TextButton(onClick = {
                         preferenceManager.myPrefs.cloudSubExpiry = 0L
@@ -197,16 +184,13 @@ fun CloudHomeScreen(
                         Text("Add Key", color = Color.Cyan, fontSize = 12.sp)
                     }
                 }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
                 TextButton(onClick = {
                     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/atanu_roy"))
                     context.startActivity(intent)
                 }) {
                     Icon(Icons.Default.ShoppingCart, null, tint = Color.Cyan, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Buy Subscription", color = Color.Cyan, fontSize = 12.sp)
+                    Text("Support", color = Color.Cyan, fontSize = 12.sp)
                 }
             }
         }
@@ -243,7 +227,7 @@ fun ServerCard(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(160.dp)
+            .fillMaxWidth()
             .scale(scale)
             .onFocusChanged { isFocused = it.isFocused }
             .clip(RoundedCornerShape(12.dp))
