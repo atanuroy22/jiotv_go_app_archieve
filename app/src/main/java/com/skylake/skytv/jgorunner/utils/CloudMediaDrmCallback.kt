@@ -23,6 +23,7 @@ class CloudMediaDrmCallback(
             .url(url)
             .post(request.data.toRequestBody("application/octet-stream".toMediaType()))
             .build()
+
         LogCollector.log("DRM Provision Request: $url")
         return httpClient.newCall(okRequest).execute().use { response ->
             if (!response.isSuccessful) {
@@ -40,6 +41,7 @@ class CloudMediaDrmCallback(
         }
 
         val isAlex = licenseUrl.contains("alex4528.site", true)
+
         val requestData = request.data
         val contentType = if (requestData.isNotEmpty() && requestData[0].toInt().toChar() == '{') {
             "application/json"
@@ -54,6 +56,7 @@ class CloudMediaDrmCallback(
         headers.forEach { (k, v) ->
             builder.header(k, v)
         }
+
         if (isAlex) {
             builder.header("Origin", "https://alex4528.site")
             builder.header("Referer", "https://alex4528.site/")
@@ -62,17 +65,20 @@ class CloudMediaDrmCallback(
             builder.header("Sec-Fetch-Dest", "empty")
             builder.header("Accept", "*/*")
         }
+
         if (!headers.containsKey("Content-Type")) {
             builder.header("Content-Type", contentType)
         }
 
         val okRequest = builder.build()
         LogCollector.log("DRM Key Request: POST $licenseUrl (Type: $contentType)")
+
         var retryCount = 0
         while (retryCount < 5) {
             try {
                 httpClient.newCall(okRequest).execute().use { response ->
                     val responseBodyBytes = response.body?.bytes() ?: throw Exception("Empty license response")
+
                     // Retry on 502/504 AND 403 (alex server sometimes throws 403 on temporary load)
                     if (response.code == 502 || response.code == 504 || response.code == 500 || (isAlex && response.code == 403)) {
                         LogCollector.log("DRM Server Error ${response.code}, retrying ($retryCount/5)...")

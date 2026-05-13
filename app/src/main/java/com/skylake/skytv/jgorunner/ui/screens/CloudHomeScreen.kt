@@ -11,8 +11,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -52,15 +50,18 @@ fun CloudHomeScreen(
 ) {
     val preferenceManager = SkySharedPref.getInstance(context)
     val repository = remember { CloudRepository(context) }
+
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var countdown by remember { mutableIntStateOf(5) }
     var isAutoplayActive by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayEnabled) }
     var showCouponDialog by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
 
     var refreshTrigger by remember { mutableIntStateOf(0) }
-    val subExpiry = preferenceManager.myPrefs.cloudSubExpiry
-    val isSubscribed = subExpiry > System.currentTimeMillis()
+
+    val subExpiry = remember(refreshTrigger) { preferenceManager.myPrefs.cloudSubExpiry }
+    val isSubscribed = remember(subExpiry) { subExpiry > System.currentTimeMillis() }
+
+    val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(refreshTrigger) {
         val fetched = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
@@ -69,6 +70,7 @@ fun CloudHomeScreen(
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
             logo = "https://iili.io/f1zkPwP.md.png"
         )
+
         servers = if (isSubscribed) {
             fetched + freeJio
         } else {
@@ -80,10 +82,9 @@ fun CloudHomeScreen(
         if (isAutoplayActive && servers.isNotEmpty()) {
             while (countdown > 0) {
                 delay(1000)
-                if (!isAutoplayActive) break
                 countdown--
             }
-            if (countdown == 0 && isAutoplayActive) {
+            if (countdown == 0) {
                 onServerSelected(servers.first())
             }
         }
@@ -102,7 +103,7 @@ fun CloudHomeScreen(
             }
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 24.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -119,8 +120,11 @@ fun CloudHomeScreen(
             )
 
             if (servers.isEmpty()) {
-                CircularProgressIndicator(color = Color.Cyan)
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color.Cyan)
+                }
             } else {
+                // Changed to Vertical Grid to fit mobile and TV without horizontal hiding
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 150.dp),
                     contentPadding = PaddingValues(16.dp),
@@ -150,47 +154,53 @@ fun CloudHomeScreen(
                     text = "Autoplay in $countdown... Any key to cancel",
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 14.sp,
-                    modifier = Modifier.padding(bottom = 20.dp)
+                    modifier = Modifier.padding(vertical = 10.dp)
                 )
             }
 
+            // Footer info
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
             ) {
                 val sdf = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
                 val expiryText = if (isSubscribed) {
-                    "Subscription valid until: ${sdf.format(Date(subExpiry))}"
+                    "Valid until: ${sdf.format(Date(subExpiry))}"
                 } else {
-                    "Free Mode (Local Jio enabled)"
+                    "Free Mode (Local Jio)"
                 }
+
                 Text(
                     text = expiryText,
                     color = if (isSubscribed) Color.Green else Color.Yellow,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     modifier = Modifier.weight(1f)
                 )
+
                 if (isSubscribed) {
                     TextButton(onClick = {
                         preferenceManager.myPrefs.cloudSubExpiry = 0L
                         preferenceManager.savePreferences()
                         Toast.makeText(context, "Subscription removed", Toast.LENGTH_SHORT).show()
                         refreshTrigger++
-                    }) {
-                        Text("Remove Key", color = Color.Red, fontSize = 12.sp)
+                    }, contentPadding = PaddingValues(4.dp)) {
+                        Text("Remove Key", color = Color.Red, fontSize = 11.sp)
                     }
                 } else {
-                    TextButton(onClick = { showCouponDialog = true }) {
-                        Text("Add Key", color = Color.Cyan, fontSize = 12.sp)
+                    TextButton(onClick = { showCouponDialog = true }, contentPadding = PaddingValues(4.dp)) {
+                        Text("Add Key", color = Color.Cyan, fontSize = 11.sp)
                     }
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
                 TextButton(onClick = {
                     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/atanu_roy"))
                     context.startActivity(intent)
-                }) {
-                    Icon(Icons.Default.ShoppingCart, null, tint = Color.Cyan, modifier = Modifier.size(16.dp))
+                }, contentPadding = PaddingValues(4.dp)) {
+                    Icon(Icons.Default.ShoppingCart, null, tint = Color.Cyan, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Support", color = Color.Cyan, fontSize = 12.sp)
+                    Text("Buy", color = Color.Cyan, fontSize = 11.sp)
                 }
             }
         }
@@ -241,7 +251,7 @@ fun ServerCard(
             model = server.logo,
             contentDescription = null,
             modifier = Modifier
-                .size(90.dp)
+                .size(80.dp)
                 .clip(RoundedCornerShape(8.dp)),
             contentScale = ContentScale.Fit
         )

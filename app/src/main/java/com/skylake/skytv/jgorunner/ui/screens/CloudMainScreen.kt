@@ -1,9 +1,11 @@
 package com.skylake.skytv.jgorunner.ui.screens
 
 import android.app.Activity
+import android.widget.Toast
 import android.content.Context
 import android.content.ContextWrapper
-import android.widget.Toast
+import android.util.Log
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
@@ -19,8 +21,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
@@ -36,6 +38,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -45,14 +48,14 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.skylake.skytv.jgorunner.core.execution.runBinary
-import com.skylake.skytv.jgorunner.data.CloudDataManager
 import com.skylake.skytv.jgorunner.data.CloudRepository
 import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.ui.components.MultiSelectFilterDialog
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import com.skylake.skytv.jgorunner.utils.LogCollector
+import com.skylake.skytv.jgorunner.data.CloudDataManager
+import com.skylake.skytv.jgorunner.core.execution.runBinary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -74,17 +77,17 @@ fun CloudMainScreen(
     var isLoadingChannels by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    var searchQuery by remember { mutableStateOf("") }
-    var isSidebarVisible by remember { mutableStateOf(false) }
+    var isSidebarVisible by remember { mutableStateOf(true) }
     var isSearchVisible by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
     val serverFiltersJson = preferenceManager.myPrefs.cloudServerFilters ?: "{}"
-    val serverFiltersMap: MutableMap<String, Set<String>> = remember(serverFiltersJson) {
+    val serverFiltersMap = remember(serverFiltersJson) {
         try {
-            val type = object : TypeToken<MutableMap<String, Set<String>>>() {}.type
-            gson.fromJson(serverFiltersJson, type) ?: mutableMapOf()
+            val type = object : TypeToken<Map<String, Set<String>>>() {}.type
+            gson.fromJson<Map<String, Set<String>>>(serverFiltersJson, type) ?: mutableMapOf()
         } catch (e: Exception) {
-            mutableMapOf()
+            mutableMapOf<String, Set<String>>()
         }
     }
 
@@ -92,9 +95,8 @@ fun CloudMainScreen(
         mutableStateOf(serverFiltersMap[currentServer?.url] ?: emptySet())
     }
 
-    val savedLangs = preferenceManager.myPrefs.cloudLanguageFilter ?: ""
     var selectedLanguages by remember {
-        mutableStateOf(if (savedLangs.isEmpty()) emptySet<String>() else savedLangs.split(",").toSet())
+        mutableStateOf(preferenceManager.myPrefs.cloudLanguageFilter?.split(",")?.toSet()?.filter { it.isNotEmpty() }?.toSet() ?: emptySet())
     }
 
     var showCategoryDialog by remember { mutableStateOf(false) }
@@ -106,15 +108,19 @@ fun CloudMainScreen(
 
     val filteredChannels = remember(channels, searchQuery, selectedCategories, selectedLanguages) {
         channels.filter { channel ->
-            val matchesSearch = if (searchQuery.isEmpty()) true
-                               else channel.name.contains(searchQuery, ignoreCase = true) ||
-                                    channel.group?.contains(searchQuery, ignoreCase = true) == true
+            val matchesSearch = searchQuery.isEmpty() ||
+                channel.name.contains(searchQuery, ignoreCase = true) ||
+                channel.group?.contains(searchQuery, ignoreCase = true) == true ||
+                channel.language?.contains(searchQuery, ignoreCase = true) == true
 
-            val matchesCategory = if (selectedCategories.isEmpty() || selectedCategories.contains("All")) true
-                                 else selectedCategories.contains(channel.group)
+            val matchesCategory = selectedCategories.isEmpty() || selectedCategories.any { filter ->
+                channel.group?.contains(filter, ignoreCase = true) == true
+            }
 
-            val matchesLanguage = if (selectedLanguages.isEmpty() || selectedLanguages.contains("All")) true
-                                  else selectedLanguages.any { lang -> channel.language?.contains(lang, ignoreCase = true) == true || channel.name.contains(lang, ignoreCase = true) }
+            // Fixed: Support multi-language strings in channel.language (e.g., "Hindi, English")
+            val matchesLanguage = selectedLanguages.isEmpty() || selectedLanguages.any { filter ->
+                channel.language?.contains(filter, ignoreCase = true) == true
+            }
 
             matchesSearch && matchesCategory && matchesLanguage
         }
@@ -139,8 +145,16 @@ fun CloudMainScreen(
 
     LaunchedEffect(isSearchVisible) {
         if (isSearchVisible) {
-            delay(100)
             searchFocusRequester.requestFocus()
+        }
+    }
+
+    LaunchedEffect(filteredChannels, isSidebarVisible, isSearchVisible) {
+        if (filteredChannels.isNotEmpty() && !isSidebarVisible && !isSearchVisible) {
+            delay(300)
+            try {
+                firstChannelFocusRequester.requestFocus()
+            } catch (_: Exception) {}
         }
     }
 
@@ -151,8 +165,8 @@ fun CloudMainScreen(
             isLoadingChannels = true
             errorMessage = null
 
-            val isLocal = server.url.contains("localhost") || server.url.contains("127.0.0.1")
             var retryCount = 0
+            val isLocal = server.url.contains("localhost") || server.url.contains("127.0.0.1")
 
             while (retryCount < 5) {
                 try {
@@ -185,15 +199,22 @@ fun CloudMainScreen(
                 }
                 retryCount++
             }
+
+            if (channels.isEmpty() && errorMessage == null) {
+                errorMessage = "Failed to load channels."
+            }
+
             isLoadingChannels = false
 
-            // Autoplay logic
-            val nowFiltered = channels.filter { ch ->
-                val matchesCat = if (selectedCategories.isEmpty() || selectedCategories.contains("All")) true
-                                 else selectedCategories.contains(ch.group)
-                val matchesLang = if (selectedLanguages.isEmpty() || selectedLanguages.contains("All")) true
-                                  else selectedLanguages.any { l -> ch.language?.contains(l, ignoreCase = true) == true || ch.name.contains(l, ignoreCase = true) }
-                matchesCat && matchesLang
+            // Re-calculate filtered list immediately for autoplay
+            val nowFiltered = channels.filter { channel ->
+                val matchesCategory = selectedCategories.isEmpty() || selectedCategories.any { filter ->
+                    channel.group?.contains(filter, ignoreCase = true) == true
+                }
+                val matchesLanguage = selectedLanguages.isEmpty() || selectedLanguages.any { filter ->
+                    channel.language?.contains(filter, ignoreCase = true) == true
+                }
+                matchesCategory && matchesLanguage
             }
 
             if (nowFiltered.isNotEmpty()) {
@@ -204,6 +225,7 @@ fun CloudMainScreen(
 
                 val lastId = if (preferenceManager.myPrefs.cloudAutoplayLastChannel) lastPlayedMap[server.url] else null
                 val lastChannel = if (lastId != null) nowFiltered.find { it.id == lastId } else null
+
                 if (lastChannel != null) {
                     onPlayChannel(lastChannel, nowFiltered)
                 } else if (preferenceManager.myPrefs.cloudAutoplayFirstChannel) {
@@ -228,6 +250,7 @@ fun CloudMainScreen(
             .fillMaxSize()
             .background(Color(0xFF050505))
     ) {
+        // Sidebar
         val animationsEnabled = preferenceManager.myPrefs.cloudAnimationEnabled
 
         AnimatedVisibility(
@@ -236,7 +259,7 @@ fun CloudMainScreen(
             exit = if (animationsEnabled) shrinkHorizontally() + fadeOut() else ExitTransition.None
         ) {
             Row(modifier = Modifier.fillMaxHeight()) {
-                // Servers List
+                // Servers
                 Column(
                     modifier = Modifier
                         .width(160.dp)
@@ -254,6 +277,7 @@ fun CloudMainScreen(
                     Box(modifier = Modifier.weight(1f)) {
                         val subExpiry = preferenceManager.myPrefs.cloudSubExpiry
                         val isSubscribed = subExpiry > System.currentTimeMillis()
+
                         LazyColumn {
                             items(servers) { server ->
                                 val isLocal = server.url.contains("localhost") || server.url.contains("127.0.0.1")
@@ -269,7 +293,7 @@ fun CloudMainScreen(
                     }
                 }
 
-                // Settings List
+                // Settings
                 Column(
                     modifier = Modifier
                         .width(180.dp)
@@ -279,6 +303,9 @@ fun CloudMainScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
                         Text("Settings", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { isSidebarVisible = false }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Close, "Collapse", tint = Color.Red, modifier = Modifier.size(18.dp))
+                        }
                     }
                     LazyColumn(modifier = Modifier.weight(1f)) {
                         item {
@@ -297,9 +324,28 @@ fun CloudMainScreen(
                                 preferenceManager.savePreferences()
                             }
                         }
-                        item { SettingsActionItemCompact("Search", Icons.Default.Search) { isSearchVisible = !isSearchVisible } }
-                        item { SettingsActionItemCompact("Category Filter", Icons.Default.FilterList) { showCategoryDialog = true } }
-                        item { SettingsActionItemCompact("Language Filter", Icons.Default.Language) { showLanguageDialog = true } }
+                        item {
+                            SettingsActionItemCompact("Search", Icons.Default.Search) { isSearchVisible = !isSearchVisible }
+                        }
+                        item {
+                            SettingsActionItemCompact("Category Filter", Icons.Default.FilterList) { showCategoryDialog = true }
+                        }
+                        item {
+                            SettingsActionItemCompact("Language Filter", Icons.Default.Language) { showLanguageDialog = true }
+                        }
+                        item {
+                            SettingsActionItemCompact("Clear Filters", Icons.Default.FilterAltOff) {
+                                selectedCategories = emptySet()
+                                selectedLanguages = emptySet()
+                                val newMap = serverFiltersMap.toMutableMap()
+                                if (currentServer != null) {
+                                    newMap[currentServer!!.url] = emptySet()
+                                }
+                                preferenceManager.myPrefs.cloudServerFilters = gson.toJson(newMap)
+                                preferenceManager.myPrefs.cloudLanguageFilter = ""
+                                preferenceManager.savePreferences()
+                            }
+                        }
                         item {
                             SettingsActionItemCompact("Refresh", Icons.Default.Refresh) {
                                 currentServer?.let {
@@ -317,7 +363,9 @@ fun CloudMainScreen(
                                 Toast.makeText(context, "Cache cleared", Toast.LENGTH_SHORT).show()
                             }
                         }
-                        item { SettingsActionItemCompact("Logs", Icons.Default.BugReport) { showLogDialog = true } }
+                        item {
+                            SettingsActionItemCompact("Logs", Icons.Default.BugReport) { showLogDialog = true }
+                        }
                         item {
                             var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAnimationEnabled) }
                             SettingsToggleRefreshed("Animations", checked) {
@@ -334,12 +382,26 @@ fun CloudMainScreen(
                                 preferenceManager.savePreferences()
                             }
                         }
-                        item { SettingsActionItemCompact("Exit", Icons.AutoMirrored.Filled.ExitToApp) { (context as? Activity)?.finishAffinity() } }
+                        item {
+                            SettingsActionItemCompact("Reset UI", Icons.Default.RestartAlt) {
+                                preferenceManager.myPrefs.cloudUiScale = 1.0f
+                                preferenceManager.myPrefs.cloudAnimationEnabled = true
+                                preferenceManager.myPrefs.cloudFocusAnimationEnabled = true
+                                preferenceManager.myPrefs.cloudServerFilters = "{}"
+                                preferenceManager.myPrefs.cloudLanguageFilter = ""
+                                preferenceManager.savePreferences()
+                                onNavigate("CloudHome")
+                            }
+                        }
+                        item {
+                            SettingsActionItemCompact("Exit", Icons.AutoMirrored.Filled.ExitToApp) { (context as? Activity)?.finishAffinity() }
+                        }
                     }
                 }
             }
         }
 
+        // Search Panel
         AnimatedVisibility(
             visible = isSearchVisible,
             enter = if (animationsEnabled) expandHorizontally() + fadeIn() else EnterTransition.None,
@@ -353,6 +415,7 @@ fun CloudMainScreen(
                     .padding(12.dp)
             ) {
                 Text("Search Channels", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -368,14 +431,35 @@ fun CloudMainScreen(
                         }
                     }
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { searchQuery = "" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)) { Text("Clear", fontSize = 11.sp) }
-                    Button(onClick = { isSearchVisible = false }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333))) { Text("Close", fontSize = 11.sp) }
+                    Button(
+                        onClick = { searchQuery = "" },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                        shape = RoundedCornerShape(4.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("Clear", fontSize = 11.sp)
+                    }
+                    Button(
+                        onClick = { isSearchVisible = false },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333)),
+                        shape = RoundedCornerShape(4.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("Close", fontSize = 11.sp)
+                    }
                 }
+
+                Text("Results: ${filteredChannels.size}", color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(top = 12.dp))
             }
         }
 
+        // Channels
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
                 if (!isSidebarVisible) {
@@ -389,17 +473,37 @@ fun CloudMainScreen(
                     color = Color.White,
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
+                if (selectedCategories.isNotEmpty() || selectedLanguages.isNotEmpty()) {
+                    Surface(
+                        color = Color.Cyan.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.clickable { showCategoryDialog = true }
+                    ) {
+                        Text(
+                            text = "${selectedCategories.size + selectedLanguages.size} filters",
+                            color = Color.Cyan,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
             }
 
             if (isLoadingChannels) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color.Cyan)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Color.Cyan)
+                        if (errorMessage != null) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(text = errorMessage!!, color = Color.Gray, fontSize = 12.sp)
+                        }
+                    }
                 }
             } else if (errorMessage != null && channels.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(text = errorMessage!!, color = Color.White)
-                        Button(onClick = { currentServer = currentServer }) { Text("Retry") }
+                        Button(onClick = { onNavigate("CloudHome") }) { Text("Retry") }
                     }
                 }
             } else {
@@ -414,7 +518,9 @@ fun CloudMainScreen(
                             channel = channel,
                             focusAnimEnabled = preferenceManager.myPrefs.cloudFocusAnimationEnabled,
                             modifier = if (index == 0) Modifier.focusRequester(firstChannelFocusRequester) else Modifier,
-                            onSelected = { onPlayChannel(channel, filteredChannels) }
+                            onSelected = {
+                                onPlayChannel(channel, filteredChannels)
+                            }
                         )
                     }
                 }
@@ -423,7 +529,9 @@ fun CloudMainScreen(
     }
 
     if (showCategoryDialog) {
-        val categories = listOf("All") + channels.mapNotNull { it.group }.distinct().sorted()
+        val categories = remember(channels) {
+            channels.mapNotNull { it.group }.distinct().sorted()
+        }
         MultiSelectFilterDialog(
             title = "Categories",
             options = categories,
@@ -443,7 +551,12 @@ fun CloudMainScreen(
     }
 
     if (showLanguageDialog) {
-        val availableLangs = listOf("All", "Hindi", "English", "Tamil", "Telugu", "Malayalam", "Kannada", "Bengali", "Marathi", "Gujarati", "Punjabi", "Urdu", "Odia", "Assamese")
+        // Fixed: Ensure available languages include all detected from channels
+        val defaultLangs = listOf("Hindi", "English", "Tamil", "Telugu", "Malayalam", "Kannada", "Bengali", "Marathi", "Gujarati", "Punjabi", "Urdu", "Odia", "Assamese")
+        val availableLangs = remember(channels) {
+            val detected = channels.flatMap { it.language?.split(",")?.map { l -> l.trim() } ?: emptyList() }
+            (detected + defaultLangs).filter { it.isNotEmpty() }.distinct().sorted()
+        }
         MultiSelectFilterDialog(
             title = "Languages",
             options = availableLangs,
@@ -474,6 +587,7 @@ fun ServerListItem(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isFocused) 1.05f else 1.0f)
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -520,6 +634,7 @@ fun ChannelGridItemCompact(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isFocused && focusAnimEnabled) 1.1f else 1.0f)
+
     Box(
         modifier = modifier
             .width(80.dp)
@@ -549,6 +664,7 @@ fun ChannelGridItemCompact(
                         .background(Color.White.copy(alpha = 0.05f)),
                     contentScale = ContentScale.Fit
                 )
+
                 if (channel.name.contains("HD", ignoreCase = true)) {
                     Surface(
                         color = Color.Red,
@@ -581,6 +697,7 @@ fun SettingsToggleRefreshed(
     onCheckedChange: (Boolean) -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -610,6 +727,7 @@ fun SettingsActionItemCompact(
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
