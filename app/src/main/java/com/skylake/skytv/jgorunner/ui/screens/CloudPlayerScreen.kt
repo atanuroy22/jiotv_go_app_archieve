@@ -449,7 +449,7 @@ fun CloudPlayerScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Subtle indicator for fallback or initial loading
+        // Subtle indicator for fallback or initial loading - text removed as requested
         if (isSilentTransition) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Color.Cyan, modifier = Modifier.size(32.dp))

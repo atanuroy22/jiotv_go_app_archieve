@@ -27,6 +27,7 @@ class CloudPlayerActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         val prefManager = SkySharedPref.getInstance(this)
         val channels = CloudDataManager.currentChannelList ?: emptyList()
         initialIndexState = intent.getIntExtra("current_cloud_channel_index", 0)

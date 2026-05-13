@@ -87,7 +87,6 @@ class CloudRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.e("CloudRepository", "Local M3U fetch failed", e)
         }
-
         emptyList()
     }
 
@@ -100,7 +99,7 @@ class CloudRepository(private val context: Context) {
         var currentLanguage = ""
 
         val indianLanguages = listOf("Hindi", "English", "Tamil", "Telugu", "Malayalam", "Kannada", "Bengali", "Marathi", "Gujarati", "Punjabi", "Urdu", "Odia", "Assamese")
-        val baseServerUrl = baseUrl.substringBeforeLast("/")
+        val baseServerUrl = "http://localhost:${SkySharedPref.getInstance(context).myPrefs.jtvGoServerPort}"
 
         lines.forEach { line ->
             if (line.startsWith("#EXTINF")) {
@@ -109,22 +108,31 @@ class CloudRepository(private val context: Context) {
                 currentLogo = line.substringAfter("tvg-logo=\"").substringBefore("\"")
                 currentGroup = line.substringAfter("group-title=\"").substringBefore("\"")
 
-                // Detection logic
-                val found = indianLanguages.filter { currentName.contains(it, ignoreCase = true) }
-                currentLanguage = if (found.isNotEmpty()) found.distinct().joinToString(", ") else "Hindi"
+                val langMatch = Regex("""tvg-language="([^"]+)"""").find(line) ?: Regex("""language="([^"]+)"""").find(line)
+                val langTag = langMatch?.groupValues?.get(1)
+
+                if (!langTag.isNullOrBlank()) {
+                    currentLanguage = langTag
+                } else {
+                    val found = indianLanguages.filter { currentName.contains(it, ignoreCase = true) }
+                    currentLanguage = if (found.isNotEmpty()) found.distinct().joinToString(", ") else "Hindi"
+                }
 
             } else if (line.trim().startsWith("http")) {
                 val m3u8Url = line.trim()
-                val mpdUrl = m3u8Url.replace(".m3u8", ".mpd").replace(".m3u", ".mpd")
+                // Fixed: Use direct /play/ID endpoint for localhost channels to get maximum quality/DRM support
+                val channelId = m3u8Url.substringAfterLast("/").substringBefore(".")
+                val playUrl = "$baseServerUrl/play/$channelId"
+
                 list.add(CloudChannel(
                     type = "dash",
-                    id = m3u8Url.hashCode().toString(),
+                    id = channelId,
                     name = currentName.trim(),
                     group = if (currentGroup.isBlank()) "General" else currentGroup.trim(),
                     language = currentLanguage.trim(),
                     logo = if (currentLogo.startsWith("http")) currentLogo else "$baseServerUrl/jtvimage/$currentLogo",
                     userAgent = "JioTV",
-                    mpdUrl = mpdUrl,
+                    mpdUrl = playUrl,
                     m3u8Url = m3u8Url,
                     licenseUrl = null,
                     headers = null,

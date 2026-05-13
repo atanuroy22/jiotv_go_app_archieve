@@ -41,10 +41,12 @@ object LogCollector {
             Toast.makeText(context, "No logs to copy", Toast.LENGTH_SHORT).show()
             return
         }
+
         try {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("SkyTV Logs", logText)
             clipboard.setPrimaryClip(clip)
+
             // For Android 12 and below, we show a toast. Android 13+ has its own UI.
             if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.S_V2) {
                 Toast.makeText(context, "Logs copied to clipboard", Toast.LENGTH_SHORT).show()

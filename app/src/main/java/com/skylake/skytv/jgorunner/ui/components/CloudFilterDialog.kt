@@ -89,6 +89,7 @@ fun FilterItemRow(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val bgColor by animateColorAsState(if (isFocused) Color.Cyan.copy(alpha = 0.1f) else Color.Transparent)
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -113,7 +114,7 @@ fun FilterItemRow(
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = label,
-            color = if (isFocused) Color.White else Color.Gray,
+            color = if (isFocused) Color.Cyan else Color.White,
             fontSize = 14.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
         )
