@@ -120,7 +120,7 @@ fun CloudPlayerScreen(
     var numericBuffer by remember { mutableStateOf("") }
     var showNumericOverlay by remember { mutableStateOf(false) }
     var numericJob by remember { mutableStateOf<Job?>(null) }
-    var lastAttemptWasDash by remember { mutableStateOf(false) }
+    var lastAttemptWasDash by remember(currentIndex) { mutableStateOf(false) }
 
     var isFallbackAttempt by remember(currentIndex) { mutableStateOf(false) }
     var isSilentTransition by remember(currentIndex) { mutableStateOf(false) }
