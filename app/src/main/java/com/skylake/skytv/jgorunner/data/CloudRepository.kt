@@ -58,12 +58,17 @@ class CloudRepository(private val context: Context) {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use emptyList()
                 val body = response.body?.string() ?: return@use emptyList()
+
+                if (body.contains("#EXTM3U")) {
+                    return@withContext parseM3U(body, url)
+                }
+
                 cacheFile.writeText(body)
                 val type = object : TypeToken<List<CloudChannel>>() {}.type
                 try {
                     gson.fromJson<List<CloudChannel>>(body, type) ?: emptyList<CloudChannel>()
                 } catch (e: Exception) {
-                    Log.e("CloudRepository", "Parse failed for $url", e)
+                    Log.e("CloudRepository", "Parse failed for $url. Body snippet: ${body.take(100)}")
                     emptyList()
                 }
             }
