@@ -120,6 +120,7 @@ fun CloudPlayerScreen(
     var numericBuffer by remember { mutableStateOf("") }
     var showNumericOverlay by remember { mutableStateOf(false) }
     var numericJob by remember { mutableStateOf<Job?>(null) }
+    var lastAttemptWasDash by remember(currentIndex) { mutableStateOf(false) }
 
     var isFallbackAttempt by remember(currentIndex) { mutableStateOf(false) }
     var isSilentTransition by remember(currentIndex) { mutableStateOf(false) }
@@ -175,10 +176,24 @@ fun CloudPlayerScreen(
                     override fun onPlayerError(error: PlaybackException) {
                         LogCollector.logError("CloudPlayer Error: ${error.errorCodeName} - ${error.message}", error)
 
-                        if (!isFallbackAttempt && activeCloudChannel?.m3u8Url != null &&
-                            (error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ||
-                             error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
-                             error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND)) {
+                        val isDrmError = when (error.errorCode) {
+                            PlaybackException.ERROR_CODE_DRM_UNSPECIFIED,
+                            PlaybackException.ERROR_CODE_DRM_PROVISIONING_FAILED,
+                            PlaybackException.ERROR_CODE_DRM_LICENSE_ACQUISITION_FAILED,
+                            PlaybackException.ERROR_CODE_DRM_CONTENT_ERROR,
+                            PlaybackException.ERROR_CODE_DRM_DEVICE_REVOKED,
+                            PlaybackException.ERROR_CODE_DRM_LICENSE_EXPIRED,
+                            PlaybackException.ERROR_CODE_DRM_SYSTEM_ERROR -> true
+                            else -> false
+                        }
+                        val isFallbackCandidateError =
+                            error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ||
+                                error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
+                                error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ||
+                                isDrmError
+
+                        if (!isFallbackAttempt && lastAttemptWasDash && !activeCloudChannel?.m3u8Url.isNullOrBlank() &&
+                            isFallbackCandidateError) {
 
                             LogCollector.log("Primary stream error, trying alternate URL for ${activeCloudChannel?.name}")
                             isFallbackAttempt = true
@@ -256,7 +271,7 @@ fun CloudPlayerScreen(
         val playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
 
         if (playbackUrl.isNotBlank()) {
-            val normalized = normalizePlaybackUrl(context, playbackUrl)
+            val normalized = normalizePlaybackUrl(context, playbackUrl, keepPlayEndpoint = true)
             LogCollector.log("Preparing Cloud Player: ${ch.name} -> $normalized")
 
             val builder = MediaItem.Builder()
@@ -269,6 +284,7 @@ fun CloudPlayerScreen(
                 normalized.contains("/play/") ||
                 (ch.type == "dash" && !normalized.contains(".m3u8"))
             )
+            lastAttemptWasDash = isDash
 
             if (isDash) {
                 builder.setMimeType(MimeTypes.APPLICATION_MPD)
@@ -281,7 +297,8 @@ fun CloudPlayerScreen(
             normalizedHeaders.forEach { (k, v) -> defaultRequestProperties[k] = v }
             dataSourceFactory.setDefaultRequestProperties(defaultRequestProperties)
 
-            if (!ch.licenseUrl.isNullOrBlank() && !isFallbackAttempt) {
+            val useDrm = !ch.licenseUrl.isNullOrBlank() && !isFallbackAttempt
+            val drmSessionManager = if (useDrm) {
                 LogCollector.log("Configuring DRM: ${ch.licenseUrl}")
 
                 val isClearKey = ch.licenseUrl.contains("plkey.php", true) ||
@@ -299,35 +316,31 @@ fun CloudPlayerScreen(
                 )
 
                 val drmCallback = CloudMediaDrmCallback(ch.licenseUrl!!, normalizedHeaders, okHttpClient)
-                val drmSessionManager = DefaultDrmSessionManager.Builder()
+                DefaultDrmSessionManager.Builder()
                     .setMultiSession(true)
                     .setUuidAndExoMediaDrmProvider(drmUuid, FrameworkMediaDrm.DEFAULT_PROVIDER)
                     .build(drmCallback)
-
-                val mediaItem = builder.build()
-                val mediaSource = if (isDash) {
-                    DashMediaSource.Factory(dataSourceFactory)
-                        .setDrmSessionManagerProvider { drmSessionManager }
-                        .createMediaSource(mediaItem)
-                } else {
-                    HlsMediaSource.Factory(dataSourceFactory)
-                        .setDrmSessionManagerProvider { drmSessionManager }
-                        .createMediaSource(mediaItem)
-                }
-                exoPlayer.setMediaSource(mediaSource)
             } else {
-                val mediaItem = builder.build()
-                val mediaSource = if (isDash) {
-                    DashMediaSource.Factory(dataSourceFactory).createMediaSource(mediaItem)
-                } else {
-                    HlsMediaSource.Factory(dataSourceFactory).createMediaSource(mediaItem)
+                null
+            }
+
+            val mediaItem = builder.build()
+            val mediaSource = if (isDash) {
+                val factory = DashMediaSource.Factory(dataSourceFactory)
+                if (drmSessionManager != null) {
+                    factory.setDrmSessionManagerProvider { drmSessionManager }
                 }
-                exoPlayer.setMediaSource(mediaSource)
+                factory.createMediaSource(mediaItem)
+            } else {
+                val factory = HlsMediaSource.Factory(dataSourceFactory)
+                if (drmSessionManager != null) {
+                    factory.setDrmSessionManagerProvider { drmSessionManager }
+                }
+                factory.createMediaSource(mediaItem)
             }
 
             exoPlayer.stop()
-            exoPlayer.clearMediaItems()
-            exoPlayer.setMediaItem(builder.build()) // will be overwritten if DRM used below, but good for base
+            exoPlayer.setMediaSource(mediaSource)
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
             setupCustomPlaybackLogic(exoPlayer, normalized)

@@ -107,7 +107,7 @@ fun withQuality(context: Context, chURL: String, logIT: Boolean = false): String
     return videoUrl
 }
 
-fun normalizePlaybackUrl(context: Context, inputUrl: String): String {
+fun normalizePlaybackUrl(context: Context, inputUrl: String, keepPlayEndpoint: Boolean = false): String {
     val skyPref = SkySharedPref.getInstance(context).myPrefs
     var url = inputUrl.trim().trim('`', '"', '\'')
 
@@ -122,7 +122,7 @@ fun normalizePlaybackUrl(context: Context, inputUrl: String): String {
     val parsedForPlay = runCatching { Uri.parse(url) }.getOrNull()
     val playPath = parsedForPlay?.encodedPath.orEmpty()
     val playMatch = Regex(""".*/play/(\d+)$""").find(playPath)
-    if (playMatch != null) {
+    if (playMatch != null && !keepPlayEndpoint) {
         val id = playMatch.groupValues[1]
         val livePath = "/live/$id.m3u8"
         url = parsedForPlay?.buildUpon()?.encodedPath(livePath)?.build()?.toString() ?: url
