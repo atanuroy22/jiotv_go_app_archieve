@@ -151,15 +151,28 @@ fun normalizePlaybackUrl(context: Context, inputUrl: String): String {
     }
 
     if (!effectiveQuality.isNullOrEmpty()) {
-        val normalizedBase = url
-            .replace("/live/low/", "/live/", ignoreCase = true)
-            .replace("/live/medium/", "/live/", ignoreCase = true)
-            .replace("/live/high/", "/live/", ignoreCase = true)
-        url = when (effectiveQuality) {
-            "low" -> normalizedBase.replace("/live/", "/live/low/", ignoreCase = true)
-            "high" -> normalizedBase.replace("/live/", "/live/high/", ignoreCase = true)
-            "medium" -> normalizedBase.replace("/live/", "/live/medium/", ignoreCase = true)
-            else -> normalizedBase
+        if (url.contains("/bpk-tv/", ignoreCase = true)) {
+            val qValue = when (effectiveQuality) {
+                "low" -> "180"
+                "medium" -> "480"
+                "high" -> "1080"
+                else -> null
+            }
+            if (qValue != null) {
+                val parsedQ = Uri.parse(url)
+                url = parsedQ.buildUpon().appendQueryParameter("q", qValue).build().toString()
+            }
+        } else {
+            val normalizedBase = url
+                .replace("/live/low/", "/live/", ignoreCase = true)
+                .replace("/live/medium/", "/live/", ignoreCase = true)
+                .replace("/live/high/", "/live/", ignoreCase = true)
+            url = when (effectiveQuality) {
+                "low" -> normalizedBase.replace("/live/", "/live/low/", ignoreCase = true)
+                "high" -> normalizedBase.replace("/live/", "/live/high/", ignoreCase = true)
+                "medium" -> normalizedBase.replace("/live/", "/live/medium/", ignoreCase = true)
+                else -> normalizedBase
+            }
         }
     }
 

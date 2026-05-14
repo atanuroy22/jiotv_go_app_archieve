@@ -139,10 +139,10 @@ fun CloudPlayerScreen(
                 val url = request.url.toString()
                 val builder = request.newBuilder()
 
-                val jioMobileUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
+                val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
 
                 if (url.contains("jio.com", true) || url.contains("webplay.fun", true)) {
-                    builder.header("User-Agent", jioMobileUA)
+                    builder.header("User-Agent", jioUA)
                     builder.header("os", "android")
                     builder.header("devicetype", "phone")
                     builder.header("uniqueId", androidId)
@@ -161,7 +161,7 @@ fun CloudPlayerScreen(
                     builder.header("Sec-Fetch-Mode", "cors")
                     builder.header("Sec-Fetch-Site", "same-origin")
                     builder.header("Sec-Fetch-Dest", "empty")
-                    builder.header("User-Agent", jioMobileUA)
+                    builder.header("User-Agent", jioUA)
                 }
 
                 chain.proceed(builder.build())
@@ -230,7 +230,7 @@ fun CloudPlayerScreen(
             }
     }
 
-    LaunchedEffect(currentIndex, isFallbackAttempt) {
+    LaunchedEffect(currentIndex, isFallbackAttempt, preferenceManager.myPrefs.filterQX) {
         val ch = activeList.getOrNull(currentIndex)
         if (ch == null) return@LaunchedEffect
 
@@ -252,6 +252,7 @@ fun CloudPlayerScreen(
         playerError = null
         retryCountRef.value = 0
 
+        val qPref = preferenceManager.myPrefs.filterQX
         val playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
 
         if (playbackUrl.isNotBlank()) {
@@ -732,6 +733,8 @@ fun CloudSettingsPanel(
         "Fixed Height" to AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
     )
 
+    val qualities = listOf("Auto", "Low", "Medium", "High")
+
     Box(modifier = Modifier.fillMaxHeight().width(280.dp).background(Color.Black.copy(alpha = 0.85f)).padding(16.dp)) {
         Column {
             Text("Player Settings", color = Color.Cyan, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
@@ -759,6 +762,17 @@ fun CloudSettingsPanel(
                         val currentIndex = modes.indexOfFirst { it.second == currentResizeMode }
                         val nextIndex = (currentIndex + 1) % modes.size
                         onResizeModeChange(modes[nextIndex].second)
+                    }
+                }
+                item {
+                    var currentQ by remember { mutableStateOf(preferenceManager.myPrefs.filterQX ?: "Auto") }
+                    SettingsActionItemCompact("Quality: $currentQ", Icons.Default.HighQuality) {
+                        val nextIndex = (qualities.indexOf(currentQ) + 1) % qualities.size
+                        val nextQ = qualities[nextIndex]
+                        currentQ = nextQ
+                        preferenceManager.myPrefs.filterQX = if (nextQ == "Auto") null else nextQ.lowercase()
+                        preferenceManager.savePreferences()
+                        onClose() // Reload player by closing and letting it re-prepare if needed, or simple close is fine.
                     }
                 }
                 item {
