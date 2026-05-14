@@ -61,9 +61,10 @@ class CloudMediaDrmCallback(
             builder.header("Origin", "https://alex4528.site")
             builder.header("Referer", "https://alex4528.site/")
             builder.header("Sec-Fetch-Mode", "cors")
-            builder.header("Sec-Fetch-Site", "same-origin")
+            builder.header("Sec-Fetch-Site", "cross-site")
             builder.header("Sec-Fetch-Dest", "empty")
             builder.header("Accept", "*/*")
+            builder.header("Accept-Language", "en-US,en;q=0.9")
         }
 
         if (!headers.containsKey("Content-Type")) {
@@ -76,29 +77,31 @@ class CloudMediaDrmCallback(
         var retryCount = 0
         while (retryCount < 5) {
             try {
-                httpClient.newCall(okRequest).execute().use { response ->
-                    val responseBodyBytes = response.body?.bytes() ?: throw Exception("Empty license response")
+                val call = httpClient.newCall(okRequest)
+                val response = call.execute()
+                response.use { resp ->
+                    val responseBodyBytes = resp.body?.bytes() ?: throw Exception("Empty license response")
 
-                    // Retry on 502/504 AND 403 (alex server sometimes throws 403 on temporary load)
-                    if (response.code == 502 || response.code == 504 || response.code == 500 || (isAlex && response.code == 403)) {
-                        LogCollector.log("DRM Server Error ${response.code}, retrying ($retryCount/5)...")
+                    // Retry on 502/504/500 AND 403 (alex server sometimes throws 403 on temporary load or header mismatch)
+                    if (resp.code == 502 || resp.code == 504 || resp.code == 500 || (isAlex && resp.code == 403)) {
+                        LogCollector.log("DRM Server Error ${resp.code}, retrying (${retryCount + 1}/5)...")
                         retryCount++
                         Thread.sleep(1500)
-                        return@use // continues to next iteration of while loop
-                    }
-
-                    if (!response.isSuccessful) {
+                        // Explicitly continue the while loop
+                    } else if (!resp.isSuccessful) {
                         val errBody = String(responseBodyBytes.take(1024).toByteArray()).filter { it.code in 32..126 }
-                        LogCollector.log("DRM Error ${response.code}: $errBody")
-                        throw Exception("License server error: ${response.code}")
+                        LogCollector.log("DRM Error ${resp.code}: $errBody")
+                        throw Exception("License server error: ${resp.code}")
+                    } else {
+                        return responseBodyBytes
                     }
-
-                    return responseBodyBytes
                 }
             } catch (e: Exception) {
-                if (retryCount >= 4) {
-                    LogCollector.log("DRM Request failed after all retries: ${e.message}")
-                    throw e
+                if (e is java.io.IOException || e is java.net.SocketTimeoutException) {
+                   LogCollector.log("DRM Network Error: ${e.message}, retrying (${retryCount + 1}/5)...")
+                } else {
+                   LogCollector.log("DRM Exception: ${e.message}")
+                   if (retryCount >= 4) throw e
                 }
                 retryCount++
                 Thread.sleep(1500)

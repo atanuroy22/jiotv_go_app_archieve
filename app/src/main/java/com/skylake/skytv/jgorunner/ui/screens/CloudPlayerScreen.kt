@@ -696,6 +696,7 @@ fun CloudSidePanel(
     }
 }
 
+@OptIn(UnstableApi::class)
 @Composable
 fun CloudSettingsPanel(
     preferenceManager: SkySharedPref,
