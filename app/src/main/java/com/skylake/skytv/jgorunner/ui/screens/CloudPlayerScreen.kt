@@ -767,12 +767,6 @@ fun CloudSettingsPanel(
     val normalizedQualityPref = preferenceManager.myPrefs.filterQX?.trim()?.lowercase()
     val qualityLabelFromPref =
         qualityOptions.firstOrNull { it.second == normalizedQualityPref }?.first ?: "Auto"
-    LaunchedEffect(normalizedQualityPref) {
-        if (normalizedQualityPref != null && qualityLabelFromPref == "Auto") {
-            preferenceManager.myPrefs.filterQX = null
-            preferenceManager.savePreferences()
-        }
-    }
 
     Box(modifier = Modifier.fillMaxHeight().width(280.dp).background(Color.Black.copy(alpha = 0.85f)).padding(16.dp)) {
         Column {
@@ -798,7 +792,7 @@ fun CloudSettingsPanel(
                 item {
                     var currentQ by remember { mutableStateOf(qualityLabelFromPref) }
                     SettingsActionItemCompact("Quality: $currentQ", Icons.Default.HighQuality) {
-                        val currentIndex = qualityLabels.indexOf(currentQ)
+                        val currentIndex = qualityLabels.indexOf(currentQ).let { if (it < 0) 0 else it }
                         val nextIndex = (currentIndex + 1) % qualityLabels.size
                         val nextLabel = qualityLabels[nextIndex]
                         currentQ = nextLabel
