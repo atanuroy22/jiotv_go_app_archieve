@@ -139,8 +139,10 @@ fun CloudPlayerScreen(
                 val url = request.url.toString()
                 val builder = request.newBuilder()
 
+                val jioMobileUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
+
                 if (url.contains("jio.com", true) || url.contains("webplay.fun", true)) {
-                    builder.header("User-Agent", "JioTV")
+                    builder.header("User-Agent", jioMobileUA)
                     builder.header("os", "android")
                     builder.header("devicetype", "phone")
                     builder.header("uniqueId", androidId)
@@ -159,7 +161,7 @@ fun CloudPlayerScreen(
                     builder.header("Sec-Fetch-Mode", "cors")
                     builder.header("Sec-Fetch-Site", "same-origin")
                     builder.header("Sec-Fetch-Dest", "empty")
-                    builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                    builder.header("User-Agent", jioMobileUA)
                 }
 
                 chain.proceed(builder.build())
