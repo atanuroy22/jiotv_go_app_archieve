@@ -209,6 +209,8 @@ fun CloudPlayerScreen(
 
         val isAlex = ch.mpdUrl?.contains("alex4528.site", true) == true ||
                     ch.licenseUrl?.contains("alex4528.site", true) == true
+        val isWebPlay = ch.mpdUrl?.contains("webplay.fun", true) == true ||
+                       ch.licenseUrl?.contains("webplay.fun", true) == true
 
         val androidId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "0123456789abcdef"
 
@@ -232,13 +234,14 @@ fun CloudPlayerScreen(
             normalizedHeaders["versionCode"] = "323"
             normalizedHeaders["X-Jio-Network-Type"] = "WIFI"
             normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
+            normalizedHeaders["Referer"] = "https://www.jio.com/"
         }
 
-        if (isAlex) {
-            normalizedHeaders["Origin"] = "https://alex4528.site"
-            normalizedHeaders["Referer"] = "https://alex4528.site/"
+        if (isAlex || isWebPlay) {
+            normalizedHeaders["Origin"] = if (isAlex) "https://alex4528.site" else "https://temp.webplay.fun"
+            normalizedHeaders["Referer"] = if (isAlex) "https://alex4528.site/" else "https://temp.webplay.fun/"
             normalizedHeaders["Sec-Fetch-Mode"] = "cors"
-            normalizedHeaders["Sec-Fetch-Site"] = "same-origin"
+            normalizedHeaders["Sec-Fetch-Site"] = if (isAlex) "same-origin" else "cross-site"
             normalizedHeaders["Sec-Fetch-Dest"] = "empty"
         }
 
@@ -278,7 +281,9 @@ fun CloudPlayerScreen(
             }
 
             val dataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
-            dataSourceFactory.setDefaultRequestProperties(normalizedHeaders)
+            val defaultRequestProperties = mutableMapOf<String, String>()
+            normalizedHeaders.forEach { (k, v) -> defaultRequestProperties[k] = v }
+            dataSourceFactory.setDefaultRequestProperties(defaultRequestProperties)
 
             if (!ch.licenseUrl.isNullOrBlank() && !isFallbackAttempt) {
                 LogCollector.log("Configuring DRM: ${ch.licenseUrl}")
