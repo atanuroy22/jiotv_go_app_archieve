@@ -297,9 +297,8 @@ fun CloudPlayerScreen(
             normalizedHeaders.forEach { (k, v) -> defaultRequestProperties[k] = v }
             dataSourceFactory.setDefaultRequestProperties(defaultRequestProperties)
 
-            val mediaItem = builder.build()
             val useDrm = !ch.licenseUrl.isNullOrBlank() && !isFallbackAttempt
-            val mediaSource = if (useDrm) {
+            val drmSessionManager = if (useDrm) {
                 LogCollector.log("Configuring DRM: ${ch.licenseUrl}")
 
                 val isClearKey = ch.licenseUrl.contains("plkey.php", true) ||
@@ -317,30 +316,30 @@ fun CloudPlayerScreen(
                 )
 
                 val drmCallback = CloudMediaDrmCallback(ch.licenseUrl!!, normalizedHeaders, okHttpClient)
-                val drmSessionManager = DefaultDrmSessionManager.Builder()
+                DefaultDrmSessionManager.Builder()
                     .setMultiSession(true)
                     .setUuidAndExoMediaDrmProvider(drmUuid, FrameworkMediaDrm.DEFAULT_PROVIDER)
                     .build(drmCallback)
-
-                if (isDash) {
-                    DashMediaSource.Factory(dataSourceFactory)
-                        .setDrmSessionManagerProvider { drmSessionManager }
-                        .createMediaSource(mediaItem)
-                } else {
-                    HlsMediaSource.Factory(dataSourceFactory)
-                        .setDrmSessionManagerProvider { drmSessionManager }
-                        .createMediaSource(mediaItem)
-                }
             } else {
-                if (isDash) {
-                    DashMediaSource.Factory(dataSourceFactory).createMediaSource(mediaItem)
-                } else {
-                    HlsMediaSource.Factory(dataSourceFactory).createMediaSource(mediaItem)
+                null
+            }
+
+            val mediaItem = builder.build()
+            val mediaSource = if (isDash) {
+                val factory = DashMediaSource.Factory(dataSourceFactory)
+                if (drmSessionManager != null) {
+                    factory.setDrmSessionManagerProvider { drmSessionManager }
                 }
+                factory.createMediaSource(mediaItem)
+            } else {
+                val factory = HlsMediaSource.Factory(dataSourceFactory)
+                if (drmSessionManager != null) {
+                    factory.setDrmSessionManagerProvider { drmSessionManager }
+                }
+                factory.createMediaSource(mediaItem)
             }
 
             exoPlayer.stop()
-            exoPlayer.clearMediaItems()
             exoPlayer.setMediaSource(mediaSource)
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
