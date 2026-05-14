@@ -167,7 +167,7 @@ fun CloudHomeScreen(
                 val expiryText = if (isSubscribed) {
                     "Valid until: ${sdf.format(Date(subExpiry))}"
                 } else {
-                    "Free Mode (Local Jio)"
+                    "🎉 Get Jio+ at special price!"
                 }
 
                 Text(
