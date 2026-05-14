@@ -63,7 +63,7 @@ class CloudMediaDrmCallback(
             builder.header("Origin", if (isAlex) "https://alex4528.site" else "https://temp.webplay.fun")
             builder.header("Referer", if (isAlex) "https://alex4528.site/" else "https://temp.webplay.fun/")
             builder.header("Sec-Fetch-Mode", "cors")
-            builder.header("Sec-Fetch-Site", "same-origin")
+            builder.header("Sec-Fetch-Site", if (isAlex) "same-origin" else "cross-site")
             builder.header("Sec-Fetch-Dest", "empty")
             builder.header("Accept", "*/*")
             builder.header("User-Agent", "plaYtv/7.1.3 (Linux;Android 14)")

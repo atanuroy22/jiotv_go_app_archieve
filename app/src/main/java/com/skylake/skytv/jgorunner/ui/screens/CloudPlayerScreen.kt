@@ -234,6 +234,7 @@ fun CloudPlayerScreen(
             normalizedHeaders["versionCode"] = "323"
             normalizedHeaders["X-Jio-Network-Type"] = "WIFI"
             normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
+            normalizedHeaders["Origin"] = "https://www.jio.com"
         }
 
         if (isAlex || isWebPlay) {
