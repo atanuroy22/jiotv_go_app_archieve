@@ -764,9 +764,9 @@ fun CloudSettingsPanel(
         "High (1080p)" to "high"
     )
     val qualityLabels = qualityOptions.map { it.first }
-    val normalizedQualityPref = preferenceManager.myPrefs.filterQX?.trim()?.lowercase()
-    val qualityLabelFromPref =
-        qualityOptions.firstOrNull { it.second == normalizedQualityPref }?.first ?: "Auto"
+    val normalizedQuality = preferenceManager.myPrefs.filterQX?.trim()?.lowercase()
+    val initialQualityLabel =
+        qualityOptions.firstOrNull { it.second == normalizedQuality }?.first ?: "Auto"
 
     Box(modifier = Modifier.fillMaxHeight().width(280.dp).background(Color.Black.copy(alpha = 0.85f)).padding(16.dp)) {
         Column {
@@ -790,7 +790,7 @@ fun CloudSettingsPanel(
                     }
                 }
                 item {
-                    var currentQ by remember { mutableStateOf(qualityLabelFromPref) }
+                    var currentQ by remember { mutableStateOf(initialQualityLabel) }
                     SettingsActionItemCompact("Quality: $currentQ", Icons.Default.HighQuality) {
                         val currentIndex = qualityLabels.indexOf(currentQ).let { if (it < 0) 0 else it }
                         val nextIndex = (currentIndex + 1) % qualityLabels.size
