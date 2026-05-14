@@ -66,7 +66,7 @@ class CloudMediaDrmCallback(
             builder.header("Sec-Fetch-Site", if (isAlex) "same-origin" else "cross-site")
             builder.header("Sec-Fetch-Dest", "empty")
             builder.header("Accept", "*/*")
-            builder.header("User-Agent", "plaYtv/7.1.3 (Linux;Android 14)")
+            builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
         }
 
         if (!headers.containsKey("Content-Type")) {
