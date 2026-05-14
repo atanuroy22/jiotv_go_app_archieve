@@ -401,6 +401,19 @@ fun CloudPlayerScreen(
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
 
+                if (event.key == Key.Back || event.key == Key.Escape) {
+                    if (showSettingsPanel) {
+                        showSettingsPanel = false
+                        rootFocusRequester.requestFocus()
+                        return@onPreviewKeyEvent true
+                    }
+                    if (showChannelPanel) {
+                        showChannelPanel = false
+                        rootFocusRequester.requestFocus()
+                        return@onPreviewKeyEvent true
+                    }
+                }
+
                 when (event.key) {
                     Key.DirectionLeft -> {
                         if (!showChannelPanel && !showSettingsPanel) {
@@ -550,8 +563,7 @@ fun CloudPlayerScreen(
                 onClose = {
                     showSettingsPanel = false
                     rootFocusRequester.requestFocus()
-                },
-                onLogClick = { showSettingsPanel = false }
+                }
             )
         }
 
@@ -735,8 +747,7 @@ fun CloudSettingsPanel(
     focusRequester: FocusRequester,
     currentResizeMode: Int,
     onResizeModeChange: (Int) -> Unit,
-    onClose: () -> Unit,
-    onLogClick: () -> Unit
+    onClose: () -> Unit
 ) {
     val modes = listOf(
         "Fit" to AspectRatioFrameLayout.RESIZE_MODE_FIT,
@@ -746,7 +757,16 @@ fun CloudSettingsPanel(
         "Fixed Height" to AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
     )
 
-    val qualities = listOf("Auto", "Low", "Medium", "High")
+    val qualityOptions = listOf(
+        "Auto" to null,
+        "Low" to "low",
+        "Medium" to "medium",
+        "High (1080p)" to "high"
+    )
+    val qualityLabels = qualityOptions.map { it.first }
+    val normalizedQuality = preferenceManager.myPrefs.filterQX?.trim()?.lowercase()
+    val initialQualityLabel =
+        qualityOptions.firstOrNull { it.second == normalizedQuality }?.first ?: "Auto"
 
     Box(modifier = Modifier.fillMaxHeight().width(280.dp).background(Color.Black.copy(alpha = 0.85f)).padding(16.dp)) {
         Column {
@@ -762,14 +782,6 @@ fun CloudSettingsPanel(
                     }
                 }
                 item {
-                    var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudFocusAnimationEnabled) }
-                    SettingsToggleRefreshed("Focus Glow", checked) {
-                        checked = it
-                        preferenceManager.myPrefs.cloudFocusAnimationEnabled = it
-                        preferenceManager.savePreferences()
-                    }
-                }
-                item {
                     val currentLabel = modes.find { it.second == currentResizeMode }?.first ?: "Fit"
                     SettingsActionItemCompact("Aspect Ratio: $currentLabel", Icons.Default.AspectRatio, modifier = Modifier.focusRequester(focusRequester)) {
                         val currentIndex = modes.indexOfFirst { it.second == currentResizeMode }
@@ -778,21 +790,16 @@ fun CloudSettingsPanel(
                     }
                 }
                 item {
-                    var currentQ by remember { mutableStateOf(preferenceManager.myPrefs.filterQX ?: "Auto") }
+                    var currentQ by remember { mutableStateOf(initialQualityLabel) }
                     SettingsActionItemCompact("Quality: $currentQ", Icons.Default.HighQuality) {
-                        val nextIndex = (qualities.indexOf(currentQ) + 1) % qualities.size
-                        val nextQ = qualities[nextIndex]
-                        currentQ = nextQ
-                        preferenceManager.myPrefs.filterQX = if (nextQ == "Auto") null else nextQ.lowercase()
+                        val currentIndex = qualityLabels.indexOf(currentQ).let { if (it < 0) 0 else it }
+                        val nextIndex = (currentIndex + 1) % qualityLabels.size
+                        val nextLabel = qualityLabels[nextIndex]
+                        currentQ = nextLabel
+                        preferenceManager.myPrefs.filterQX = qualityOptions[nextIndex].second
                         preferenceManager.savePreferences()
                         onClose() // Reload player by closing and letting it re-prepare if needed, or simple close is fine.
                     }
-                }
-                item {
-                    SettingsActionItemCompact("Playback Stats", Icons.Default.BarChart) { /* Logic */ }
-                }
-                item {
-                    SettingsActionItemCompact("Playback Logs", Icons.Default.BugReport) { onLogClick() }
                 }
                 item {
                     SettingsActionItemCompact("Close Menu", Icons.Default.Close) { onClose() }
