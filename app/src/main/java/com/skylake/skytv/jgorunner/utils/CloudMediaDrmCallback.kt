@@ -84,7 +84,8 @@ class CloudMediaDrmCallback(
         val maxRetries = 5
         while (retryCount <= maxRetries) {
             try {
-                httpClient.newCall(okRequest).execute().use { response ->
+                val currentCall = httpClient.newCall(okRequest)
+                currentCall.execute().use { response ->
                     val bodyBytes = response.body?.bytes() ?: throw Exception("Empty license response")
 
                     if (response.isSuccessful) {
@@ -94,10 +95,10 @@ class CloudMediaDrmCallback(
                     // Retry on common server errors or 403 (picky proxies)
                     if (response.code == 502 || response.code == 504 || response.code == 500 || response.code == 503 || response.code == 403 || response.code == 429) {
                         if (retryCount < maxRetries) {
-                            LogCollector.log("DRM Server Error ${response.code}, retrying (${retryCount + 1}/$maxRetries)...")
+                            LogCollector.log("DRM Server Error ${response.code} for $licenseUrl, retrying (${retryCount + 1}/$maxRetries)...")
                             retryCount++
-                            Thread.sleep(1000L + (retryCount * 500L))
-                            return@use // continue while
+                            Thread.sleep(1000L + (retryCount * 1000L)) // Increased delay
+                            return@use // This will cause the while loop to continue
                         }
                     }
 
