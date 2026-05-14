@@ -63,14 +63,10 @@ class CloudMediaDrmCallback(
             builder.header("Origin", if (isAlex) "https://alex4528.site" else "https://temp.webplay.fun")
             builder.header("Referer", if (isAlex) "https://alex4528.site/" else "https://temp.webplay.fun/")
             builder.header("Sec-Fetch-Mode", "cors")
-            builder.header("Sec-Fetch-Site", if (isAlex) "same-origin" else "cross-site")
+            builder.header("Sec-Fetch-Site", "same-origin")
             builder.header("Sec-Fetch-Dest", "empty")
             builder.header("Accept", "*/*")
-
-            // For alex4528.site, a clean modern browser UA is often more successful than plaYtv
-            if (isAlex) {
-                builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-            }
+            builder.header("User-Agent", "plaYtv/7.1.3 (Linux;Android 14)")
         }
 
         if (!headers.containsKey("Content-Type")) {
@@ -78,7 +74,8 @@ class CloudMediaDrmCallback(
         }
 
         val okRequest = builder.build()
-        LogCollector.log("DRM Key Request: POST $licenseUrl (Type: $contentType)")
+        val headerLog = okRequest.headers.names().joinToString { name -> "$name: ${okRequest.headers[name]}" }
+        LogCollector.log("DRM Key Request: POST $licenseUrl (Type: $contentType) Headers: [$headerLog]")
 
         var retryCount = 0
         val maxRetries = 5

@@ -216,7 +216,7 @@ fun CloudPlayerScreen(
 
         val finalUA = when {
             ch.userAgent != null && ch.userAgent != "@cloudplay" && ch.userAgent.isNotBlank() -> ch.userAgent
-            isJio -> "JioTV/7.0.8 (Linux; Android 11; SM-G998B Build/RP1A.200720.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/122.0.6261.64 Mobile Safari/537.36"
+            isJio -> "plaYtv/7.1.3 (Linux;Android 14)"
             else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         }
 
@@ -234,7 +234,6 @@ fun CloudPlayerScreen(
             normalizedHeaders["versionCode"] = "323"
             normalizedHeaders["X-Jio-Network-Type"] = "WIFI"
             normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
-            normalizedHeaders["Referer"] = "https://www.jio.com/"
         }
 
         if (isAlex || isWebPlay) {
