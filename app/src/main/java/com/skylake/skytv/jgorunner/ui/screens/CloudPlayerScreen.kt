@@ -176,7 +176,16 @@ fun CloudPlayerScreen(
                     override fun onPlayerError(error: PlaybackException) {
                         LogCollector.logError("CloudPlayer Error: ${error.errorCodeName} - ${error.message}", error)
 
-                        val isDrmError = error.errorCodeName.contains("DRM", ignoreCase = true)
+                        val isDrmError = when (error.errorCode) {
+                            PlaybackException.ERROR_CODE_DRM_UNSPECIFIED,
+                            PlaybackException.ERROR_CODE_DRM_PROVISIONING_FAILED,
+                            PlaybackException.ERROR_CODE_DRM_LICENSE_ACQUISITION_FAILED,
+                            PlaybackException.ERROR_CODE_DRM_CONTENT_ERROR,
+                            PlaybackException.ERROR_CODE_DRM_DEVICE_REVOKED,
+                            PlaybackException.ERROR_CODE_DRM_LICENSE_EXPIRED,
+                            PlaybackException.ERROR_CODE_DRM_SYSTEM_ERROR -> true
+                            else -> false
+                        }
                         val isFallbackCandidateError =
                             error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ||
                                 error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
@@ -288,7 +297,9 @@ fun CloudPlayerScreen(
             normalizedHeaders.forEach { (k, v) -> defaultRequestProperties[k] = v }
             dataSourceFactory.setDefaultRequestProperties(defaultRequestProperties)
 
-            val mediaSource = if (!ch.licenseUrl.isNullOrBlank() && !isFallbackAttempt) {
+            val mediaItem = builder.build()
+            val useDrm = !ch.licenseUrl.isNullOrBlank() && !isFallbackAttempt
+            val mediaSource = if (useDrm) {
                 LogCollector.log("Configuring DRM: ${ch.licenseUrl}")
 
                 val isClearKey = ch.licenseUrl.contains("plkey.php", true) ||
@@ -311,7 +322,6 @@ fun CloudPlayerScreen(
                     .setUuidAndExoMediaDrmProvider(drmUuid, FrameworkMediaDrm.DEFAULT_PROVIDER)
                     .build(drmCallback)
 
-                val mediaItem = builder.build()
                 if (isDash) {
                     DashMediaSource.Factory(dataSourceFactory)
                         .setDrmSessionManagerProvider { drmSessionManager }
@@ -322,7 +332,6 @@ fun CloudPlayerScreen(
                         .createMediaSource(mediaItem)
                 }
             } else {
-                val mediaItem = builder.build()
                 if (isDash) {
                     DashMediaSource.Factory(dataSourceFactory).createMediaSource(mediaItem)
                 } else {
