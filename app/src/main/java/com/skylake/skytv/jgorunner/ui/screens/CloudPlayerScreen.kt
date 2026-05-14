@@ -757,19 +757,22 @@ fun CloudSettingsPanel(
         "Fixed Height" to AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
     )
 
-    val qualities = listOf("Auto", "Low", "Medium", "High (1080p)")
-    val qualityLabelFromPref = when (preferenceManager.myPrefs.filterQX?.trim()?.lowercase()) {
-        "low" -> "Low"
-        "medium" -> "Medium"
-        "high" -> "High (1080p)"
-        else -> "Auto"
-    }
-    val qualityPrefFromLabel = mapOf(
+    val qualityOptions = listOf(
         "Auto" to null,
         "Low" to "low",
         "Medium" to "medium",
         "High (1080p)" to "high"
     )
+    val qualityLabels = qualityOptions.map { it.first }
+    val normalizedQualityPref = preferenceManager.myPrefs.filterQX?.trim()?.lowercase()
+    val qualityLabelFromPref =
+        qualityOptions.firstOrNull { it.second == normalizedQualityPref }?.first ?: "Auto"
+    LaunchedEffect(normalizedQualityPref) {
+        if (normalizedQualityPref != null && qualityLabelFromPref == "Auto") {
+            preferenceManager.myPrefs.filterQX = null
+            preferenceManager.savePreferences()
+        }
+    }
 
     Box(modifier = Modifier.fillMaxHeight().width(280.dp).background(Color.Black.copy(alpha = 0.85f)).padding(16.dp)) {
         Column {
@@ -795,11 +798,11 @@ fun CloudSettingsPanel(
                 item {
                     var currentQ by remember { mutableStateOf(qualityLabelFromPref) }
                     SettingsActionItemCompact("Quality: $currentQ", Icons.Default.HighQuality) {
-                        val currentIndex = qualities.indexOf(currentQ).coerceAtLeast(0)
-                        val nextIndex = (currentIndex + 1) % qualities.size
-                        val nextLabel = qualities[nextIndex]
+                        val currentIndex = qualityLabels.indexOf(currentQ)
+                        val nextIndex = (currentIndex + 1) % qualityLabels.size
+                        val nextLabel = qualityLabels[nextIndex]
                         currentQ = nextLabel
-                        preferenceManager.myPrefs.filterQX = qualityPrefFromLabel[nextLabel]
+                        preferenceManager.myPrefs.filterQX = qualityOptions[nextIndex].second
                         preferenceManager.savePreferences()
                         onClose() // Reload player by closing and letting it re-prepare if needed, or simple close is fine.
                     }
