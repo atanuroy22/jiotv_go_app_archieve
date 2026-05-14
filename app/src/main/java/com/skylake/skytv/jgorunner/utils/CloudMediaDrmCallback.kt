@@ -40,10 +40,6 @@ class CloudMediaDrmCallback(
             licenseUrl = defaultLicenseUrl
         }
 
-        val urlLower = licenseUrl.lowercase()
-        val isAlex = urlLower.contains("alex4528.site")
-        val isWebPlay = urlLower.contains("webplay.fun")
-
         val requestData = request.data
         val contentType = if (requestData.isNotEmpty() && requestData[0].toInt().toChar() == '{') {
             "application/json"
@@ -57,16 +53,6 @@ class CloudMediaDrmCallback(
 
         headers.forEach { (k, v) ->
             builder.header(k, v)
-        }
-
-        if (isAlex || isWebPlay) {
-            builder.header("Origin", if (isAlex) "https://alex4528.site" else "https://temp.webplay.fun")
-            builder.header("Referer", if (isAlex) "https://alex4528.site/" else "https://temp.webplay.fun/")
-            builder.header("Sec-Fetch-Mode", "cors")
-            builder.header("Sec-Fetch-Site", if (isAlex) "same-origin" else "cross-site")
-            builder.header("Sec-Fetch-Dest", "empty")
-            builder.header("Accept", "*/*")
-            builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
         }
 
         if (!headers.containsKey("Content-Type")) {

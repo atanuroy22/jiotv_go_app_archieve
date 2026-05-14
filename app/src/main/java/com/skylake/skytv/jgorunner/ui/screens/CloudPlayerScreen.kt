@@ -127,11 +127,43 @@ fun CloudPlayerScreen(
     var currentResizeMode by remember { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
 
     val okHttpClient = remember {
+        val androidId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "0123456789abcdef"
+
         OkHttpClient.Builder()
             .connectTimeout(35, TimeUnit.SECONDS)
             .readTimeout(35, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
+            .addInterceptor { chain ->
+                val request = chain.request()
+                val url = request.url.toString()
+                val builder = request.newBuilder()
+
+                if (url.contains("jio.com", true) || url.contains("webplay.fun", true)) {
+                    builder.header("User-Agent", "JioTV")
+                    builder.header("os", "android")
+                    builder.header("devicetype", "phone")
+                    builder.header("uniqueId", androidId)
+                    builder.header("deviceId", androidId)
+                    builder.header("appname", "com.jio.jiotv")
+                    builder.header("versionCode", "323")
+                    builder.header("X-Jio-Network-Type", "WIFI")
+                    builder.header("X-Requested-With", "com.jio.jiotv")
+                    builder.header("Origin", "https://www.jio.com")
+                    builder.header("Referer", "https://www.jio.com/")
+                }
+
+                if (url.contains("alex4528.site", true)) {
+                    builder.header("Origin", "https://alex4528.site")
+                    builder.header("Referer", "https://alex4528.site/")
+                    builder.header("Sec-Fetch-Mode", "cors")
+                    builder.header("Sec-Fetch-Site", "same-origin")
+                    builder.header("Sec-Fetch-Dest", "empty")
+                    builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                }
+
+                chain.proceed(builder.build())
+            }
             .build()
     }
 
@@ -202,49 +234,9 @@ fun CloudPlayerScreen(
 
         activeCloudChannel = ch
 
-        val isJio = ch.mpdUrl?.contains("jio.com", true) == true ||
-                   ch.m3u8Url?.contains("jio.com", true) == true ||
-                   ch.licenseUrl?.contains("webplay.fun", true) == true ||
-                   ch.licenseUrl?.contains("jio", true) == true
-
-        val isAlex = ch.mpdUrl?.contains("alex4528.site", true) == true ||
-                    ch.licenseUrl?.contains("alex4528.site", true) == true
-        val isWebPlay = ch.mpdUrl?.contains("webplay.fun", true) == true ||
-                       ch.licenseUrl?.contains("webplay.fun", true) == true
-
-        val androidId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "0123456789abcdef"
-
-        val finalUA = when {
-            ch.userAgent != null && ch.userAgent != "@cloudplay" && ch.userAgent.isNotBlank() -> ch.userAgent
-            isJio -> "JioTV"
-            else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        }
-
         val normalizedHeaders = mutableMapOf<String, String>()
-        normalizedHeaders["User-Agent"] = finalUA
         normalizedHeaders["Accept"] = "*/*"
         normalizedHeaders["Connection"] = "keep-alive"
-
-        if (isJio) {
-            normalizedHeaders["os"] = "android"
-            normalizedHeaders["devicetype"] = "phone"
-            normalizedHeaders["uniqueId"] = androidId
-            normalizedHeaders["deviceId"] = androidId
-            normalizedHeaders["appname"] = "com.jio.jiotv"
-            normalizedHeaders["versionCode"] = "323"
-            normalizedHeaders["X-Jio-Network-Type"] = "WIFI"
-            normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
-            normalizedHeaders["Origin"] = "https://www.jio.com"
-            normalizedHeaders["Referer"] = "https://www.jio.com/"
-        }
-
-        if (isAlex || isWebPlay) {
-            normalizedHeaders["Origin"] = if (isAlex) "https://alex4528.site" else "https://temp.webplay.fun"
-            normalizedHeaders["Referer"] = if (isAlex) "https://alex4528.site/" else "https://temp.webplay.fun/"
-            normalizedHeaders["Sec-Fetch-Mode"] = "cors"
-            normalizedHeaders["Sec-Fetch-Site"] = if (isAlex) "same-origin" else "cross-site"
-            normalizedHeaders["Sec-Fetch-Dest"] = "empty"
-        }
 
         ch.headers?.forEach { (k, v) ->
             val key = when {

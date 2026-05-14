@@ -210,9 +210,9 @@ class BinaryService : Service() {
         // Check for Android O and above for notification channel
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationBuilder = Notification.Builder(this, CHANNEL_ID)
-                .setContentTitle("JTV-GO Server Running")
+                .setContentTitle("Jio+ Server Running")
                 .setContentText("The server is running in the background.")
-                .setSmallIcon(R.drawable.logo)
+                .setSmallIcon(R.mipmap.ic_launcher_alias2)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
                 .addAction(
@@ -226,9 +226,9 @@ class BinaryService : Service() {
             notification = notificationBuilder.build()
         } else {
             val notificationBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("JTV-GO Server Running")
+                .setContentTitle("Jio+ Server Running")
                 .setContentText("The server is running in the background.")
-                .setSmallIcon(R.drawable.logo)
+                .setSmallIcon(R.mipmap.ic_launcher_alias2)
                 .setContentIntent(pendingIntent) // Set the intent to open the app
                 .setOngoing(true)
                 .addAction(R.drawable.cancel_24px, "Stop Server", stopPendingIntent)
