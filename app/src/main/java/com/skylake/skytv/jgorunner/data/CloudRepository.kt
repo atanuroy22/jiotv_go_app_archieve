@@ -66,10 +66,33 @@ class CloudRepository(private val context: Context) {
                 cacheFile.writeText(body)
                 val type = object : TypeToken<List<CloudChannel>>() {}.type
                 try {
-                    gson.fromJson<List<CloudChannel>>(body, type) ?: emptyList<CloudChannel>()
+                    val list = gson.fromJson<List<CloudChannel>>(body, type)
+                    if (list != null) return@use list
+
+                    // Try parsing as a map if it's nested
+                    val mapType = object : TypeToken<Map<String, Any>>() {}.type
+                    val map = gson.fromJson<Map<String, Any>>(body, mapType)
+                    val nestedChannels = map["channels"] ?: map["data"] ?: map["list"]
+                    if (nestedChannels != null) {
+                        val nestedJson = gson.toJson(nestedChannels)
+                        return@use gson.fromJson<List<CloudChannel>>(nestedJson, type) ?: emptyList()
+                    }
+
+                    emptyList()
                 } catch (e: Exception) {
                     Log.e("CloudRepository", "Parse failed for $url. Body snippet: ${body.take(100)}")
-                    emptyList()
+                    // One last attempt for extreme cases
+                    try {
+                        val mapType = object : TypeToken<Map<String, Any>>() {}.type
+                        val map = gson.fromJson<Map<String, Any>>(body, mapType)
+                        val nestedChannels = map["channels"] ?: map["data"] ?: map["list"]
+                        if (nestedChannels != null) {
+                            val nestedJson = gson.toJson(nestedChannels)
+                            gson.fromJson<List<CloudChannel>>(nestedJson, type) ?: emptyList()
+                        } else emptyList()
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
                 }
             }
         } catch (e: Exception) {
