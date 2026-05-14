@@ -40,7 +40,9 @@ class CloudMediaDrmCallback(
             licenseUrl = defaultLicenseUrl
         }
 
-        val isAlex = licenseUrl.contains("alex4528.site", true)
+        val urlLower = licenseUrl.lowercase()
+        val isAlex = urlLower.contains("alex4528.site")
+        val isWebPlay = urlLower.contains("webplay.fun")
 
         val requestData = request.data
         val contentType = if (requestData.isNotEmpty() && requestData[0].toInt().toChar() == '{') {
@@ -57,14 +59,18 @@ class CloudMediaDrmCallback(
             builder.header(k, v)
         }
 
-        if (isAlex) {
-            builder.header("Origin", "https://alex4528.site")
-            builder.header("Referer", "https://alex4528.site/")
+        if (isAlex || isWebPlay) {
+            builder.header("Origin", if (isAlex) "https://alex4528.site" else "https://temp.webplay.fun")
+            builder.header("Referer", if (isAlex) "https://alex4528.site/" else "https://temp.webplay.fun/")
             builder.header("Sec-Fetch-Mode", "cors")
-            builder.header("Sec-Fetch-Site", "cross-site")
+            builder.header("Sec-Fetch-Site", if (isAlex) "same-origin" else "cross-site")
             builder.header("Sec-Fetch-Dest", "empty")
             builder.header("Accept", "*/*")
-            builder.header("Accept-Language", "en-US,en;q=0.9")
+
+            // For alex4528.site, a clean modern browser UA is often more successful than plaYtv
+            if (isAlex) {
+                builder.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            }
         }
 
         if (!headers.containsKey("Content-Type")) {
@@ -75,36 +81,43 @@ class CloudMediaDrmCallback(
         LogCollector.log("DRM Key Request: POST $licenseUrl (Type: $contentType)")
 
         var retryCount = 0
-        while (retryCount < 5) {
+        val maxRetries = 5
+        while (retryCount <= maxRetries) {
             try {
-                val call = httpClient.newCall(okRequest)
-                val response = call.execute()
-                response.use { resp ->
-                    val responseBodyBytes = resp.body?.bytes() ?: throw Exception("Empty license response")
+                httpClient.newCall(okRequest).execute().use { response ->
+                    val bodyBytes = response.body?.bytes() ?: throw Exception("Empty license response")
 
-                    // Retry on 502/504/500 AND 403 (alex server sometimes throws 403 on temporary load or header mismatch)
-                    if (resp.code == 502 || resp.code == 504 || resp.code == 500 || (isAlex && resp.code == 403)) {
-                        LogCollector.log("DRM Server Error ${resp.code}, retrying (${retryCount + 1}/5)...")
-                        retryCount++
-                        Thread.sleep(1500)
-                        // Explicitly continue the while loop
-                    } else if (!resp.isSuccessful) {
-                        val errBody = String(responseBodyBytes.take(1024).toByteArray()).filter { it.code in 32..126 }
-                        LogCollector.log("DRM Error ${resp.code}: $errBody")
-                        throw Exception("License server error: ${resp.code}")
-                    } else {
-                        return responseBodyBytes
+                    if (response.isSuccessful) {
+                        return bodyBytes
                     }
+
+                    // Retry on common server errors or 403 (picky proxies)
+                    if (response.code == 502 || response.code == 504 || response.code == 500 || response.code == 503 || response.code == 403 || response.code == 429) {
+                        if (retryCount < maxRetries) {
+                            LogCollector.log("DRM Server Error ${response.code}, retrying (${retryCount + 1}/$maxRetries)...")
+                            retryCount++
+                            Thread.sleep(1000L + (retryCount * 500L))
+                            return@use // continue while
+                        }
+                    }
+
+                    if (!response.isSuccessful) {
+                        val errBody = String(bodyBytes.take(1024).toByteArray()).filter { it.code in 32..126 }
+                        LogCollector.log("DRM Error ${response.code}: $errBody")
+                        throw Exception("License server error: ${response.code}")
+                    }
+
+                    return bodyBytes
                 }
             } catch (e: Exception) {
-                if (e is java.io.IOException || e is java.net.SocketTimeoutException) {
-                   LogCollector.log("DRM Network Error: ${e.message}, retrying (${retryCount + 1}/5)...")
+                if (retryCount < maxRetries && (e is java.io.IOException || e is java.net.SocketTimeoutException)) {
+                    LogCollector.log("DRM Network Error: ${e.message}, retrying (${retryCount + 1}/$maxRetries)...")
+                    retryCount++
+                    Thread.sleep(1500)
                 } else {
-                   LogCollector.log("DRM Exception: ${e.message}")
-                   if (retryCount >= 4) throw e
+                    LogCollector.log("DRM Exception: ${e.message}")
+                    throw e
                 }
-                retryCount++
-                Thread.sleep(1500)
             }
         }
         throw Exception("DRM Key Request failed after maximum retries")

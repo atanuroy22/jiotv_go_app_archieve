@@ -143,11 +143,15 @@ fun CloudPlayerScreen(
 
                         if (!isFallbackAttempt && activeCloudChannel?.m3u8Url != null &&
                             (error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ||
-                             error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS)) {
+                             error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
+                             error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND)) {
 
                             LogCollector.log("Primary stream error, trying alternate URL for ${activeCloudChannel?.name}")
                             isFallbackAttempt = true
                             isSilentTransition = true
+                            // Stop the player immediately to cancel any internal retries
+                            stop()
+                            clearMediaItems()
                             return
                         }
 
@@ -155,11 +159,15 @@ fun CloudPlayerScreen(
                             playerError = "${error.errorCodeName}\n${error.message}"
                         }
 
-                        if (retryCountRef.value < 5) {
+                        // Only auto-retry if NOT attempting a fallback and we haven't reached max retries
+                        if (!isSilentTransition && retryCountRef.value < 5) {
                             retryCountRef.value++
+                            LogCollector.log("Auto-retrying playback ($retryCountRef/5)...")
                             Handler(Looper.getMainLooper()).postDelayed({
-                                prepare()
-                                play()
+                                if (playerError != null) {
+                                    prepare()
+                                    play()
+                                }
                             }, 3000)
                         }
                     }
@@ -207,8 +215,7 @@ fun CloudPlayerScreen(
         val finalUA = when {
             ch.userAgent != null && ch.userAgent != "@cloudplay" && ch.userAgent.isNotBlank() -> ch.userAgent
             isJio -> "JioTV/7.0.8 (Linux; Android 11; SM-G998B Build/RP1A.200720.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/122.0.6261.64 Mobile Safari/537.36"
-            isAlex -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            else -> "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         }
 
         val normalizedHeaders = mutableMapOf<String, String>()
@@ -257,11 +264,16 @@ fun CloudPlayerScreen(
                 .setUri(normalized.toUri())
                 .setMediaId(ch.id ?: "")
 
-            val isDash = !isFallbackAttempt && (normalized.contains(".mpd") || normalized.contains("/play/") || ch.type == "dash")
+            // Resilient MimeType detection
+            val isDash = !isFallbackAttempt && (
+                normalized.contains(".mpd") ||
+                normalized.contains("/play/") ||
+                (ch.type == "dash" && !normalized.contains(".m3u8"))
+            )
 
             if (isDash) {
                 builder.setMimeType(MimeTypes.APPLICATION_MPD)
-            } else if (normalized.contains(".m3u8")) {
+            } else if (normalized.contains(".m3u8") || normalized.contains(".m3u") || normalized.contains("/live/")) {
                 builder.setMimeType(MimeTypes.APPLICATION_M3U8)
             }
 
@@ -312,6 +324,9 @@ fun CloudPlayerScreen(
                 exoPlayer.setMediaSource(mediaSource)
             }
 
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
+            exoPlayer.setMediaItem(builder.build()) // will be overwritten if DRM used below, but good for base
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
             setupCustomPlaybackLogic(exoPlayer, normalized)
@@ -369,13 +384,6 @@ fun CloudPlayerScreen(
             .background(Color.Black)
             .focusRequester(rootFocusRequester)
             .focusable()
-            .clickable(
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                indication = null
-            ) {
-                showChannelOverlay = true
-                overlayVisibilityTick = System.currentTimeMillis()
-            }
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
 
@@ -446,14 +454,24 @@ fun CloudPlayerScreen(
                     setKeepContentOnPlayerReset(true)
                     player = exoPlayer
                     exoPlayerView = this
-                    resizeMode = currentResizeMode
+                    this.resizeMode = currentResizeMode
                 }
             },
-            update = {
-                it.player = exoPlayer
-                it.resizeMode = currentResizeMode
+            update = { view ->
+                view.player = exoPlayer
+                if (view.resizeMode != currentResizeMode) {
+                    view.resizeMode = currentResizeMode
+                }
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null
+                ) {
+                    showChannelOverlay = true
+                    overlayVisibilityTick = System.currentTimeMillis()
+                }
         )
 
         // Subtle indicator for fallback or initial loading - text removed as requested
