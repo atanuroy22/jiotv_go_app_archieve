@@ -67,7 +67,7 @@ object CloudParsers {
 
     fun parseM3U(m3u: String, playlistUrl: String, localBaseServerUrl: String?): List<CloudChannel> {
         val list = mutableListOf<CloudChannel>()
-        val lines = m3u.split("\n")
+        val lines = m3u.trimStart('\uFEFF').split("\n")
         var currentName = ""
         var currentLogo = ""
         var currentGroup = ""
@@ -90,7 +90,7 @@ object CloudParsers {
         )
 
         lines.forEach { rawLine ->
-            val line = rawLine.trim().trimStart('\uFEFF')
+            val line = rawLine.trim()
             if (line.startsWith("#EXTINF", ignoreCase = true)) {
                 val nameFromTag = tvgNameRegex
                     .find(line)
@@ -98,7 +98,7 @@ object CloudParsers {
                     ?.get(1)
                     ?.trim()
                     .orEmpty()
-                val nameFromComma = line.substringAfterLast(",", "").trim()
+                val nameFromComma = line.substringAfter(",", "").trim()
                 currentName = nameFromTag.ifBlank { nameFromComma }
                 currentLogo = tvgLogoRegex
                     .find(line)
