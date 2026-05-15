@@ -83,12 +83,15 @@ object CloudParsers {
             "Assamese"
         )
 
-        lines.forEach { line ->
-            if (line.startsWith("#EXTINF")) {
-                currentName = line.substringAfter("tvg-name=\"").substringBefore("\"")
-                if (currentName == line) currentName = line.substringAfter(",")
-                currentLogo = line.substringAfter("tvg-logo=\"").substringBefore("\"")
-                currentGroup = line.substringAfter("group-title=\"").substringBefore("\"")
+        lines.forEach { rawLine ->
+            val line = rawLine.trim().trimStart('\uFEFF')
+            if (line.isBlank()) return@forEach
+            if (line.startsWith("#EXTINF", ignoreCase = true)) {
+                val nameFromTag = line.substringAfter("tvg-name=\"", "").substringBefore("\"").trim()
+                val nameFromComma = line.substringAfter(",", "").trim()
+                currentName = nameFromTag.ifBlank { nameFromComma }
+                currentLogo = line.substringAfter("tvg-logo=\"", "").substringBefore("\"").trim()
+                currentGroup = line.substringAfter("group-title=\"", "").substringBefore("\"").trim()
 
                 val langMatch = Regex("""tvg-language="([^"]+)"""").find(line) ?: Regex("""language="([^"]+)"""").find(line)
                 val langTag = langMatch?.groupValues?.get(1)
@@ -100,8 +103,9 @@ object CloudParsers {
                     currentLanguage = if (found.isNotEmpty()) found.distinct().joinToString(", ") else "Hindi"
                 }
             } else {
-                val candidate = line.trim()
-                if (candidate.isBlank() || candidate.startsWith("#")) return@forEach
+                if (line.startsWith("#")) return@forEach
+                val candidate = line
+                if (candidate.isBlank()) return@forEach
 
                 val streamUrl = resolveAgainstPlaylistUrl(playlistUrl, candidate) ?: candidate
                 if (!streamUrl.startsWith("http", ignoreCase = true)) return@forEach
@@ -189,4 +193,3 @@ object CloudParsers {
         return null
     }
 }
-
