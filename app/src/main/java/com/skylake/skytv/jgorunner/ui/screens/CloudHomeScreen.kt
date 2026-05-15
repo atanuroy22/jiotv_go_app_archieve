@@ -42,6 +42,9 @@ import java.util.Date
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+private const val JIO_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/jiotv+.json"
+private const val HOTSTAR_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/hotstar.json"
+
 @Composable
 fun CloudHomeScreen(
     context: Context,
@@ -64,7 +67,9 @@ fun CloudHomeScreen(
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(refreshTrigger) {
-        val fetched = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
+        val jioServers = repository.fetchServers(JIO_SERVER_LIST_URL)
+        val hotstarServers = repository.fetchServers(HOTSTAR_SERVER_LIST_URL)
+        val fetched = (jioServers + hotstarServers).distinctBy { it.url }
         val freeJio = CloudServer(
             name = "Free Jio",
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
