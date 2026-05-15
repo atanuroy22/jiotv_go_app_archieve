@@ -11,6 +11,12 @@ import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 object CloudParsers {
+    private val tvgNameRegex = Regex("""tvg-name="([^"]*)"""", RegexOption.IGNORE_CASE)
+    private val tvgLogoRegex = Regex("""tvg-logo="([^"]*)"""", RegexOption.IGNORE_CASE)
+    private val groupTitleRegex = Regex("""group-title="([^"]*)"""", RegexOption.IGNORE_CASE)
+    private val tvgLanguageRegex = Regex("""tvg-language="([^"]*)"""", RegexOption.IGNORE_CASE)
+    private val languageRegex = Regex("""language="([^"]*)"""", RegexOption.IGNORE_CASE)
+
     fun parseServerList(gson: Gson, body: String): List<CloudServer> {
         val directType = object : TypeToken<List<CloudServer>>() {}.type
         try {
@@ -61,7 +67,7 @@ object CloudParsers {
 
     fun parseM3U(m3u: String, playlistUrl: String, localBaseServerUrl: String?): List<CloudChannel> {
         val list = mutableListOf<CloudChannel>()
-        val lines = m3u.split("\n")
+        val lines = m3u.trimStart('\uFEFF').split("\n")
         var currentName = ""
         var currentLogo = ""
         var currentGroup = ""
@@ -83,14 +89,31 @@ object CloudParsers {
             "Assamese"
         )
 
-        lines.forEach { line ->
-            if (line.startsWith("#EXTINF")) {
-                currentName = line.substringAfter("tvg-name=\"").substringBefore("\"")
-                if (currentName == line) currentName = line.substringAfter(",")
-                currentLogo = line.substringAfter("tvg-logo=\"").substringBefore("\"")
-                currentGroup = line.substringAfter("group-title=\"").substringBefore("\"")
+        lines.forEach { rawLine ->
+            val line = rawLine.trim()
+            if (line.startsWith("#EXTINF", ignoreCase = true)) {
+                val nameFromTag = tvgNameRegex
+                    .find(line)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.trim()
+                    .orEmpty()
+                val nameFromComma = line.substringAfter(",", "").trim()
+                currentName = nameFromTag.ifBlank { nameFromComma }
+                currentLogo = tvgLogoRegex
+                    .find(line)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.trim()
+                    .orEmpty()
+                currentGroup = groupTitleRegex
+                    .find(line)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.trim()
+                    .orEmpty()
 
-                val langMatch = Regex("""tvg-language="([^"]+)"""").find(line) ?: Regex("""language="([^"]+)"""").find(line)
+                val langMatch = tvgLanguageRegex.find(line) ?: languageRegex.find(line)
                 val langTag = langMatch?.groupValues?.get(1)
 
                 if (!langTag.isNullOrBlank()) {
@@ -100,10 +123,9 @@ object CloudParsers {
                     currentLanguage = if (found.isNotEmpty()) found.distinct().joinToString(", ") else "Hindi"
                 }
             } else {
-                val candidate = line.trim()
-                if (candidate.isBlank() || candidate.startsWith("#")) return@forEach
+                if (line.isBlank() || line.startsWith("#")) return@forEach
 
-                val streamUrl = resolveAgainstPlaylistUrl(playlistUrl, candidate) ?: candidate
+                val streamUrl = resolveAgainstPlaylistUrl(playlistUrl, line) ?: line
                 if (!streamUrl.startsWith("http", ignoreCase = true)) return@forEach
 
                 val channelId = streamUrl
@@ -189,4 +211,3 @@ object CloudParsers {
         return null
     }
 }
-
