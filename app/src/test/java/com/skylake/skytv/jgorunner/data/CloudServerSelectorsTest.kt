@@ -10,7 +10,7 @@ class CloudServerSelectorsTest {
         val servers = listOf(
             CloudServer(name = "Zee5 HD 1", url = "https://example.com/hd1.m3u", logo = ""),
             CloudServer(name = "Zee5 SD 1", url = "https://example.com/sd1.m3u", logo = ""),
-            CloudServer(name = "Zee5 Sd 2", url = "https://example.com/sd2.m3u", logo = "")
+            CloudServer(name = "Zee5 SD 2", url = "https://example.com/sd2.m3u", logo = "")
         )
 
         val selected = selectSecondSdServer(servers)
