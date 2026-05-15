@@ -85,13 +85,27 @@ object CloudParsers {
 
         lines.forEach { rawLine ->
             val line = rawLine.trim().trimStart('\uFEFF')
-            if (line.isBlank()) return@forEach
             if (line.startsWith("#EXTINF", ignoreCase = true)) {
-                val nameFromTag = line.substringAfter("tvg-name=\"", "").substringBefore("\"").trim()
-                val nameFromComma = line.substringAfter(",", "").trim()
+                val nameFromTag = Regex("""tvg-name="([^"]*)"""", RegexOption.IGNORE_CASE)
+                    .find(line)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.trim()
+                    .orEmpty()
+                val nameFromComma = line.substringAfterLast(",", "").trim()
                 currentName = nameFromTag.ifBlank { nameFromComma }
-                currentLogo = line.substringAfter("tvg-logo=\"", "").substringBefore("\"").trim()
-                currentGroup = line.substringAfter("group-title=\"", "").substringBefore("\"").trim()
+                currentLogo = Regex("""tvg-logo="([^"]*)"""", RegexOption.IGNORE_CASE)
+                    .find(line)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.trim()
+                    .orEmpty()
+                currentGroup = Regex("""group-title="([^"]*)"""", RegexOption.IGNORE_CASE)
+                    .find(line)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.trim()
+                    .orEmpty()
 
                 val langMatch = Regex("""tvg-language="([^"]+)"""").find(line) ?: Regex("""language="([^"]+)"""").find(line)
                 val langTag = langMatch?.groupValues?.get(1)
