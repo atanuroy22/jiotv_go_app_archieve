@@ -27,8 +27,7 @@ class CloudRepository(private val context: Context) {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use emptyList()
                 val body = response.body?.string() ?: return@use emptyList()
-                val type = object : TypeToken<List<CloudServer>>() {}.type
-                gson.fromJson<List<CloudServer>>(body, type) ?: emptyList()
+                CloudParsers.parseServerList(gson, body)
             }
         } catch (e: Exception) {
             Log.e("CloudRepository", "Error fetching servers", e)
@@ -60,7 +59,7 @@ class CloudRepository(private val context: Context) {
                 val body = response.body?.string() ?: return@use emptyList()
 
                 if (body.contains("#EXTM3U")) {
-                    return@withContext parseM3U(body, url)
+                    return@withContext CloudParsers.parseM3U(body, url, localBaseServerUrl = null)
                 }
 
                 cacheFile.writeText(body)
@@ -72,9 +71,9 @@ class CloudRepository(private val context: Context) {
                     // Try parsing as a map if it's nested
                     val mapType = object : TypeToken<Map<String, Any>>() {}.type
                     val map = gson.fromJson<Map<String, Any>>(body, mapType)
-                    val nestedChannels = map["channels"] ?: map["data"] ?: map["list"]
-                    if (nestedChannels != null) {
-                        val nestedJson = gson.toJson(nestedChannels)
+                    val nestedChannels = CloudParsers.unwrapChannelContainer(map["channels"] ?: map["data"] ?: map["list"] ?: map["items"])
+                    nestedChannels?.let { nested ->
+                        val nestedJson = gson.toJson(nested)
                         return@use gson.fromJson<List<CloudChannel>>(nestedJson, type) ?: emptyList()
                     }
 
@@ -85,11 +84,12 @@ class CloudRepository(private val context: Context) {
                     try {
                         val mapType = object : TypeToken<Map<String, Any>>() {}.type
                         val map = gson.fromJson<Map<String, Any>>(body, mapType)
-                        val nestedChannels = map["channels"] ?: map["data"] ?: map["list"]
-                        if (nestedChannels != null) {
-                            val nestedJson = gson.toJson(nestedChannels)
-                            gson.fromJson<List<CloudChannel>>(nestedJson, type) ?: emptyList()
-                        } else emptyList()
+                        val nestedChannels = CloudParsers.unwrapChannelContainer(map["channels"] ?: map["data"] ?: map["list"] ?: map["items"])
+                        nestedChannels?.let { nested ->
+                            val nestedJson = gson.toJson(nested)
+                            return@use gson.fromJson<List<CloudChannel>>(nestedJson, type) ?: emptyList()
+                        }
+                        emptyList()
                     } catch (_: Exception) {
                         emptyList()
                     }
@@ -108,7 +108,7 @@ class CloudRepository(private val context: Context) {
                 if (response.isSuccessful) {
                     val body = response.body?.string() ?: ""
                     if (body.contains("#EXTM3U")) {
-                        return@withContext parseM3U(body, url)
+                        return@withContext CloudParsers.parseM3U(body, url, localBaseServerUrl())
                     }
                 }
             }
@@ -118,58 +118,8 @@ class CloudRepository(private val context: Context) {
         emptyList()
     }
 
-    private fun parseM3U(m3u: String, baseUrl: String): List<CloudChannel> {
-        val list = mutableListOf<CloudChannel>()
-        val lines = m3u.split("\n")
-        var currentName = ""
-        var currentLogo = ""
-        var currentGroup = ""
-        var currentLanguage = ""
-
-        val indianLanguages = listOf("Hindi", "English", "Tamil", "Telugu", "Malayalam", "Kannada", "Bengali", "Marathi", "Gujarati", "Punjabi", "Urdu", "Odia", "Assamese")
-        val baseServerUrl = "http://localhost:${SkySharedPref.getInstance(context).myPrefs.jtvGoServerPort}"
-
-        lines.forEach { line ->
-            if (line.startsWith("#EXTINF")) {
-                currentName = line.substringAfter("tvg-name=\"").substringBefore("\"")
-                if (currentName == line) currentName = line.substringAfter(",")
-                currentLogo = line.substringAfter("tvg-logo=\"").substringBefore("\"")
-                currentGroup = line.substringAfter("group-title=\"").substringBefore("\"")
-
-                val langMatch = Regex("""tvg-language="([^"]+)"""").find(line) ?: Regex("""language="([^"]+)"""").find(line)
-                val langTag = langMatch?.groupValues?.get(1)
-
-                if (!langTag.isNullOrBlank()) {
-                    currentLanguage = langTag
-                } else {
-                    val found = indianLanguages.filter { currentName.contains(it, ignoreCase = true) }
-                    currentLanguage = if (found.isNotEmpty()) found.distinct().joinToString(", ") else "Hindi"
-                }
-
-            } else if (line.trim().startsWith("http")) {
-                val m3u8Url = line.trim()
-                // Fixed: Use direct /play/ID endpoint for localhost channels to get maximum quality/DRM support
-                val channelId = m3u8Url.substringAfterLast("/").substringBefore(".")
-                val playUrl = "$baseServerUrl/play/$channelId"
-
-                list.add(CloudChannel(
-                    type = "dash",
-                    id = channelId,
-                    name = currentName.trim(),
-                    group = if (currentGroup.isBlank()) "General" else currentGroup.trim(),
-                    language = currentLanguage.trim(),
-                    logo = if (currentLogo.startsWith("http")) currentLogo else "$baseServerUrl/jtvimage/$currentLogo",
-                    userAgent = "JioTV",
-                    mpdUrl = playUrl,
-                    m3u8Url = m3u8Url,
-                    licenseUrl = null,
-                    headers = null,
-                    expiresIn = null
-                ))
-            }
-        }
-        return list
-    }
+    private fun localBaseServerUrl(): String =
+        "http://localhost:${SkySharedPref.getInstance(context).myPrefs.jtvGoServerPort}"
 
     fun clearCache() {
         cacheDir.listFiles()?.forEach { if (it.name.startsWith("cloud_channels_")) it.delete() }
