@@ -50,7 +50,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.skylake.skytv.jgorunner.data.CloudRepository
 import com.skylake.skytv.jgorunner.data.SkySharedPref
-import com.skylake.skytv.jgorunner.data.selectSecondSdServer
+import com.skylake.skytv.jgorunner.data.selectSdServerWithFallback
 import com.skylake.skytv.jgorunner.ui.components.MultiSelectFilterDialog
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
@@ -137,7 +137,7 @@ fun CloudMainScreen(
 
     LaunchedEffect(Unit) {
         val jioServers = repository.fetchServers(JIO_SERVER_LIST_URL)
-        val zee5Servers = selectSecondSdServer(repository.fetchServers(ZEE5_SERVER_LIST_URL))
+        val zee5Servers = selectSdServerWithFallback(repository.fetchServers(ZEE5_SERVER_LIST_URL))
         val sonyServers = repository.fetchServers(SONY_SERVER_LIST_URL)
         val fetched = (jioServers + zee5Servers + sonyServers).distinctBy { it.url }
         val freeJio = CloudServer(

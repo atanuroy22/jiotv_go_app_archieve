@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.skylake.skytv.jgorunner.data.CloudRepository
 import com.skylake.skytv.jgorunner.data.SkySharedPref
-import com.skylake.skytv.jgorunner.data.selectSecondSdServer
+import com.skylake.skytv.jgorunner.data.selectSdServerWithFallback
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import kotlinx.coroutines.delay
 import java.util.Calendar
@@ -70,7 +70,7 @@ fun CloudHomeScreen(
 
     LaunchedEffect(refreshTrigger) {
         val jioServers = repository.fetchServers(JIO_SERVER_LIST_URL)
-        val zee5Servers = selectSecondSdServer(repository.fetchServers(ZEE5_SERVER_LIST_URL))
+        val zee5Servers = selectSdServerWithFallback(repository.fetchServers(ZEE5_SERVER_LIST_URL))
         val sonyServers = repository.fetchServers(SONY_SERVER_LIST_URL)
         val fetched = (jioServers + zee5Servers + sonyServers).distinctBy { it.url }
         val freeJio = CloudServer(
