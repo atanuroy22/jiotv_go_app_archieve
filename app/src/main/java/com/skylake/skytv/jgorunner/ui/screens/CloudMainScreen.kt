@@ -60,7 +60,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val JIO_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/jiotv+.json"
-private const val HOTSTAR_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/hotstar.json"
+private const val ZEE5_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/zee5.json"
+
+private fun selectSecondSdServer(servers: List<CloudServer>): List<CloudServer> {
+    val sdServers = servers.filter { it.name.contains("sd", ignoreCase = true) }
+    val selected = sdServers.getOrNull(1) ?: sdServers.firstOrNull()
+    return selected?.let { listOf(it) } ?: emptyList()
+}
 
 @Composable
 fun CloudMainScreen(
@@ -135,8 +141,8 @@ fun CloudMainScreen(
 
     LaunchedEffect(Unit) {
         val jioServers = repository.fetchServers(JIO_SERVER_LIST_URL)
-        val hotstarServers = repository.fetchServers(HOTSTAR_SERVER_LIST_URL)
-        val fetched = (jioServers + hotstarServers).distinctBy { it.url }
+        val zee5Servers = selectSecondSdServer(repository.fetchServers(ZEE5_SERVER_LIST_URL))
+        val fetched = (jioServers + zee5Servers).distinctBy { it.url }
         val freeJio = CloudServer(
             name = "Free Jio",
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",

@@ -28,16 +28,16 @@ class CloudParsersTest {
         val json = """
             {
               "data": [
-                {"serverName":"Hotstar 1","endpoint":"https://example.com/hotstar.m3u","icon":"https://example.com/hs.png"}
+                {"serverName":"Zee5 SD 1","endpoint":"https://example.com/zee5.m3u","icon":"https://example.com/zee5.png"}
               ]
             }
         """.trimIndent()
 
         val servers = CloudParsers.parseServerList(gson, json)
         assertEquals(1, servers.size)
-        assertEquals("Hotstar 1", servers[0].name)
-        assertEquals("https://example.com/hotstar.m3u", servers[0].url)
-        assertEquals("https://example.com/hs.png", servers[0].logo)
+        assertEquals("Zee5 SD 1", servers[0].name)
+        assertEquals("https://example.com/zee5.m3u", servers[0].url)
+        assertEquals("https://example.com/zee5.png", servers[0].logo)
     }
 
     @Test
@@ -87,4 +87,3 @@ class CloudParsersTest {
         assertEquals("http://localhost:5350/jtvimage/143.png", channels[0].logo)
     }
 }
-
