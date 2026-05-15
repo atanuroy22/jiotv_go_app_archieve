@@ -59,6 +59,9 @@ import com.skylake.skytv.jgorunner.core.execution.runBinary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private const val JIO_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/jiotv+.json"
+private const val HOTSTAR_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/hotstar.json"
+
 @Composable
 fun CloudMainScreen(
     context: Context,
@@ -131,7 +134,9 @@ fun CloudMainScreen(
     }
 
     LaunchedEffect(Unit) {
-        val fetched = repository.fetchServers("https://cloudplay-app-json.pages.dev/cat/jiotv+.json")
+        val jioServers = repository.fetchServers(JIO_SERVER_LIST_URL)
+        val hotstarServers = repository.fetchServers(HOTSTAR_SERVER_LIST_URL)
+        val fetched = (jioServers + hotstarServers).distinctBy { it.url }
         val freeJio = CloudServer(
             name = "Free Jio",
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
