@@ -50,6 +50,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.skylake.skytv.jgorunner.data.CloudRepository
 import com.skylake.skytv.jgorunner.data.SkySharedPref
+import com.skylake.skytv.jgorunner.data.selectSecondSdServer
 import com.skylake.skytv.jgorunner.ui.components.MultiSelectFilterDialog
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
@@ -61,12 +62,6 @@ import kotlinx.coroutines.launch
 
 private const val JIO_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/jiotv+.json"
 private const val ZEE5_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/zee5.json"
-
-private fun selectSecondSdServer(servers: List<CloudServer>): List<CloudServer> {
-    val sdServers = servers.filter { it.name.contains("sd", ignoreCase = true) }
-    val selected = sdServers.getOrNull(1) ?: sdServers.firstOrNull()
-    return selected?.let { listOf(it) } ?: emptyList()
-}
 
 @Composable
 fun CloudMainScreen(
