@@ -124,13 +124,18 @@ class CloudRepository(private val context: Context) {
     }
 
     private fun unwrapChannelContainer(value: Any?): Any? {
-        return when (value) {
-            is List<*> -> value
-            is Map<*, *> -> {
-                value["channels"] ?: value["data"] ?: value["list"] ?: value["items"]
+        var current: Any? = value
+        repeat(5) {
+            current = when (current) {
+                is List<*> -> return current
+                is Map<*, *> -> (current as Map<*, *>)["channels"]
+                    ?: (current as Map<*, *>)["data"]
+                    ?: (current as Map<*, *>)["list"]
+                    ?: (current as Map<*, *>)["items"]
+                else -> return null
             }
-            else -> null
         }
+        return if (current is List<*>) current else null
     }
 
     private fun parseServerList(body: String): List<CloudServer> {
@@ -247,6 +252,10 @@ class CloudRepository(private val context: Context) {
                     .substringBefore(".")
                     .ifBlank { currentName.trim().ifBlank { m3u8Url.hashCode().toString() } }
 
+                val finalName = currentName.trim().ifBlank { channelId }
+                val finalGroup = if (currentGroup.isBlank()) "General" else currentGroup.trim()
+                val finalLanguage = currentLanguage.trim().ifBlank { "Hindi" }
+
                 val resolvedLogo = when {
                     currentLogo.isBlank() -> ""
                     currentLogo.startsWith("http", ignoreCase = true) -> currentLogo
@@ -259,9 +268,9 @@ class CloudRepository(private val context: Context) {
                 list.add(CloudChannel(
                     type = inferredType,
                     id = channelId,
-                    name = currentName.trim(),
-                    group = if (currentGroup.isBlank()) "General" else currentGroup.trim(),
-                    language = currentLanguage.trim(),
+                    name = finalName,
+                    group = finalGroup,
+                    language = finalLanguage,
                     logo = resolvedLogo,
                     userAgent = "JioTV",
                     mpdUrl = playUrl,
