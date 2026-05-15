@@ -14,8 +14,8 @@ object CloudParsers {
     private val tvgNameRegex = Regex("""tvg-name="([^"]*)"""", RegexOption.IGNORE_CASE)
     private val tvgLogoRegex = Regex("""tvg-logo="([^"]*)"""", RegexOption.IGNORE_CASE)
     private val groupTitleRegex = Regex("""group-title="([^"]*)"""", RegexOption.IGNORE_CASE)
-    private val tvgLanguageRegex = Regex("""tvg-language="([^"]+)"""", RegexOption.IGNORE_CASE)
-    private val languageRegex = Regex("""language="([^"]+)"""", RegexOption.IGNORE_CASE)
+    private val tvgLanguageRegex = Regex("""tvg-language="([^"]*)"""", RegexOption.IGNORE_CASE)
+    private val languageRegex = Regex("""language="([^"]*)"""", RegexOption.IGNORE_CASE)
 
     fun parseServerList(gson: Gson, body: String): List<CloudServer> {
         val directType = object : TypeToken<List<CloudServer>>() {}.type
