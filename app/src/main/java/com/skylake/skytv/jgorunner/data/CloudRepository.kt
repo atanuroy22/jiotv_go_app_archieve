@@ -3,7 +3,6 @@ package com.skylake.skytv.jgorunner.data
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import kotlinx.coroutines.Dispatchers
@@ -35,70 +34,76 @@ class CloudRepository(private val context: Context) {
         }
     }
 
-    suspend fun fetchChannels(url: String, forceRefresh: Boolean = false): List<CloudChannel> = withContext(Dispatchers.IO) {
+    suspend fun fetchChannels(url: String, forceRefresh: Boolean = false): List<CloudChannel> =
+        fetchChannelsInternal(url, forceRefresh, visited = mutableSetOf(), depth = 3)
+
+    private suspend fun fetchChannelsInternal(
+        url: String,
+        forceRefresh: Boolean,
+        visited: MutableSet<String>,
+        depth: Int
+    ): List<CloudChannel> = withContext(Dispatchers.IO) {
+        if (depth <= 0) return@withContext emptyList()
+        if (!visited.add(url)) return@withContext emptyList()
+
         if (url.contains("localhost") || url.contains("127.0.0.1")) {
-            return@withContext fetchLocalChannels(url)
+            return@withContext filterCloudChannels(fetchLocalChannels(url))
         }
 
         val cacheFile = File(cacheDir, "cloud_channels_${url.hashCode()}.json")
-        if (!forceRefresh && cacheFile.exists()) {
+        val cachedBody = if (!forceRefresh && cacheFile.exists()) {
             val lastModified = cacheFile.lastModified()
             if (System.currentTimeMillis() - lastModified < TimeUnit.HOURS.toMillis(1)) {
                 try {
-                    val body = cacheFile.readText()
-                    val type = object : TypeToken<List<CloudChannel>>() {}.type
-                    return@withContext gson.fromJson<List<CloudChannel>>(body, type) ?: emptyList()
-                } catch (_: Exception) {}
+                    cacheFile.readText()
+                } catch (_: Exception) {
+                    null
+                }
+            } else {
+                null
             }
+        } else {
+            null
         }
 
-        try {
+        val body = cachedBody ?: try {
             val request = Request.Builder().url(url).build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use emptyList()
-                val body = response.body?.string() ?: return@use emptyList()
-
-                if (body.contains("#EXTM3U")) {
-                    return@withContext CloudParsers.parseM3U(body, url, localBaseServerUrl = null)
-                }
-
-                cacheFile.writeText(body)
-                val type = object : TypeToken<List<CloudChannel>>() {}.type
+                if (!response.isSuccessful) return@withContext emptyList()
+                val text = response.body?.string() ?: return@withContext emptyList()
                 try {
-                    val list = gson.fromJson<List<CloudChannel>>(body, type)
-                    if (list != null) return@use list
-
-                    // Try parsing as a map if it's nested
-                    val mapType = object : TypeToken<Map<String, Any>>() {}.type
-                    val map = gson.fromJson<Map<String, Any>>(body, mapType)
-                    val nestedChannels = CloudParsers.unwrapChannelContainer(map["channels"] ?: map["data"] ?: map["list"] ?: map["items"])
-                    nestedChannels?.let { nested ->
-                        val nestedJson = gson.toJson(nested)
-                        return@use gson.fromJson<List<CloudChannel>>(nestedJson, type) ?: emptyList()
-                    }
-
-                    emptyList()
-                } catch (e: Exception) {
-                    Log.e("CloudRepository", "Parse failed for $url. Body snippet: ${body.take(100)}")
-                    // One last attempt for extreme cases
-                    try {
-                        val mapType = object : TypeToken<Map<String, Any>>() {}.type
-                        val map = gson.fromJson<Map<String, Any>>(body, mapType)
-                        val nestedChannels = CloudParsers.unwrapChannelContainer(map["channels"] ?: map["data"] ?: map["list"] ?: map["items"])
-                        nestedChannels?.let { nested ->
-                            val nestedJson = gson.toJson(nested)
-                            return@use gson.fromJson<List<CloudChannel>>(nestedJson, type) ?: emptyList()
-                        }
-                        emptyList()
-                    } catch (_: Exception) {
-                        emptyList()
-                    }
-                }
+                    cacheFile.writeText(text)
+                } catch (_: Exception) {}
+                text
             }
         } catch (e: Exception) {
             Log.e("CloudRepository", "Fetch failed for $url", e)
-            emptyList()
+            return@withContext emptyList()
         }
+
+        if (body.contains("#EXTM3U", ignoreCase = true)) {
+            return@withContext filterCloudChannels(CloudParsers.parseM3U(body, url, localBaseServerUrl = null))
+        }
+
+        val jsonChannels = CloudParsers.parseChannelList(gson, body)
+        if (jsonChannels.isNotEmpty()) {
+            return@withContext filterCloudChannels(jsonChannels)
+        }
+
+        val servers = CloudParsers.parseServerList(gson, body)
+        if (servers.isNotEmpty()) {
+            val merged = servers.flatMap { server ->
+                fetchChannelsInternal(server.url, forceRefresh, visited, depth - 1)
+            }
+            return@withContext filterCloudChannels(merged)
+        }
+
+        val nestedUrl = CloudParsers.extractFirstUrl(body)
+        if (!nestedUrl.isNullOrBlank() && !nestedUrl.equals(url, true)) {
+            return@withContext fetchChannelsInternal(nestedUrl, forceRefresh, visited, depth - 1)
+        }
+
+        emptyList()
     }
 
     private suspend fun fetchLocalChannels(url: String): List<CloudChannel> = withContext(Dispatchers.IO) {
@@ -116,6 +121,10 @@ class CloudRepository(private val context: Context) {
             Log.e("CloudRepository", "Local M3U fetch failed", e)
         }
         emptyList()
+    }
+
+    private fun filterCloudChannels(channels: List<CloudChannel>): List<CloudChannel> {
+        return channels.filterNot { it.name.equals("cloudchannel", ignoreCase = true) }
     }
 
     private fun localBaseServerUrl(): String =

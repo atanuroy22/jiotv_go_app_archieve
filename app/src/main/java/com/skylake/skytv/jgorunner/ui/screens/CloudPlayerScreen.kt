@@ -264,6 +264,10 @@ fun CloudPlayerScreen(
             normalizedHeaders[key] = v
         }
 
+        if (!ch.userAgent.isNullOrBlank() && !normalizedHeaders.containsKey("User-Agent")) {
+            normalizedHeaders["User-Agent"] = ch.userAgent
+        }
+
         playerError = null
         retryCountRef.value = 0
 

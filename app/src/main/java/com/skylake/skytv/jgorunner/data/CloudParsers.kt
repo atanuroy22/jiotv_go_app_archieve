@@ -16,6 +16,8 @@ object CloudParsers {
     private val groupTitleRegex = Regex("""group-title="([^"]*)"""", RegexOption.IGNORE_CASE)
     private val tvgLanguageRegex = Regex("""tvg-language="([^"]*)"""", RegexOption.IGNORE_CASE)
     private val languageRegex = Regex("""language="([^"]*)"""", RegexOption.IGNORE_CASE)
+    private val extVlcOptRegex = Regex("""#EXTVLCOPT:([^=]+)=(.*)""", RegexOption.IGNORE_CASE)
+    private val urlRegex = Regex("""https?://[^\s"']+""", RegexOption.IGNORE_CASE)
 
     fun parseServerList(gson: Gson, body: String): List<CloudServer> {
         val directType = object : TypeToken<List<CloudServer>>() {}.type
@@ -72,6 +74,8 @@ object CloudParsers {
         var currentLogo = ""
         var currentGroup = ""
         var currentLanguage = ""
+        var currentUserAgent = ""
+        val currentHeaders = mutableMapOf<String, String>()
 
         val indianLanguages = listOf(
             "Hindi",
@@ -113,6 +117,9 @@ object CloudParsers {
                     ?.trim()
                     .orEmpty()
 
+                currentUserAgent = ""
+                currentHeaders.clear()
+
                 val langMatch = tvgLanguageRegex.find(line) ?: languageRegex.find(line)
                 val langTag = langMatch?.groupValues?.get(1)
 
@@ -121,6 +128,25 @@ object CloudParsers {
                 } else {
                     val found = indianLanguages.filter { currentName.contains(it, ignoreCase = true) }
                     currentLanguage = if (found.isNotEmpty()) found.distinct().joinToString(", ") else "Hindi"
+                }
+            } else if (line.startsWith("#EXTVLCOPT", ignoreCase = true)) {
+                val match = extVlcOptRegex.find(line)
+                if (match != null) {
+                    val key = match.groupValues[1].trim()
+                    val value = match.groupValues[2].trim()
+                    when {
+                        key.equals("http-user-agent", true) || key.equals("user-agent", true) -> {
+                            currentUserAgent = value
+                            if (!currentHeaders.containsKey("User-Agent")) {
+                                currentHeaders["User-Agent"] = value
+                            }
+                        }
+                        key.equals("http-referrer", true) || key.equals("referrer", true) || key.equals("referer", true) -> {
+                            if (!currentHeaders.containsKey("Referer")) {
+                                currentHeaders["Referer"] = value
+                            }
+                        }
+                    }
                 }
             } else {
                 if (line.isBlank() || line.startsWith("#")) return@forEach
@@ -148,6 +174,9 @@ object CloudParsers {
                 val playbackUrl = if (localBaseServerUrl != null) "$localBaseServerUrl/play/$channelId" else streamUrl
                 val inferredType = if (localBaseServerUrl != null) "dash" else "hls"
 
+                val headersPayload = currentHeaders.takeIf { it.isNotEmpty() }
+                val userAgentPayload = currentUserAgent.trim().ifBlank { null }
+
                 list.add(
                     CloudChannel(
                         type = inferredType,
@@ -156,11 +185,11 @@ object CloudParsers {
                         group = finalGroup,
                         language = finalLanguage,
                         logo = resolvedLogo,
-                        userAgent = "JioTV",
+                        userAgent = userAgentPayload ?: "JioTV",
                         mpdUrl = playbackUrl,
                         m3u8Url = streamUrl,
                         licenseUrl = null,
-                        headers = null,
+                        headers = headersPayload,
                         expiresIn = null
                     )
                 )
@@ -174,6 +203,114 @@ object CloudParsers {
         if (candidate.startsWith("http", ignoreCase = true)) return candidate
         val base = playlistUrl.toHttpUrlOrNull() ?: return null
         return base.resolve(candidate)?.toString()
+    }
+
+    fun parseChannelList(gson: Gson, body: String): List<CloudChannel> {
+        val root = try {
+            JsonParser.parseString(body)
+        } catch (_: Exception) {
+            return emptyList()
+        }
+
+        val arr = findFirstJsonArray(root) ?: return emptyList()
+        val items = arr.mapNotNull { el ->
+            val obj = el.asJsonObjectOrNull() ?: return@mapNotNull null
+
+            val name = obj.firstStringOf("name", "title", "channel", "channel_name", "channelName")
+            val id = obj.firstStringOf("id", "channel_id", "channelId", "cid")
+            val group = obj.firstStringOf("group", "category", "group_title", "groupTitle")
+            val language = obj.firstStringOf("language", "lang", "tvg_language", "tvg-language")
+            val logo = obj.firstStringOf("logo", "icon", "image", "poster", "thumb", "thumbnail", "tvg_logo", "tvg-logo")
+            val type = obj.firstStringOf("type", "stream_type", "streamType", "format")
+            val userAgent = obj.firstStringOf("user_agent", "userAgent", "ua", "user-agent", "User-Agent")
+
+            val mpdRaw = obj.firstStringOf("mpd_url", "mpd", "dash", "dash_url", "mpdUrl")
+            val m3uRaw = obj.firstStringOf(
+                "m3u8_url",
+                "m3u8",
+                "hls",
+                "hls_url",
+                "m3u_url",
+                "m3uUrl",
+                "url",
+                "link",
+                "stream_url",
+                "streamUrl",
+                "play_url",
+                "playUrl"
+            )
+
+            val rawUrl = m3uRaw?.trim().orEmpty()
+            val isPlaylistLink = rawUrl.isNotBlank() && (
+                rawUrl.contains(".json", true) ||
+                    rawUrl.endsWith(".txt", true) ||
+                    (rawUrl.endsWith(".m3u", true) && !rawUrl.endsWith(".m3u8", true)) ||
+                    rawUrl.contains("playlist", true)
+                )
+
+            val licenseUrl = obj.firstStringOf("license_url", "licenseUrl", "license", "drm_license", "drm", "license_url")
+
+            val headers = obj.get("headers")?.takeIf { it.isJsonObject }?.asJsonObject?.let { headerObj ->
+                headerObj.entrySet().mapNotNull { (k, v) ->
+                    val value = if (v.isJsonPrimitive) v.asJsonPrimitive.asString else null
+                    value?.let { k to it }
+                }.toMap()
+            }
+
+            val expiresIn = obj.firstStringOf("expires_in", "expiresIn", "expiry", "exp")
+
+            if (isPlaylistLink && mpdRaw.isNullOrBlank() && type.isNullOrBlank() && licenseUrl.isNullOrBlank()) {
+                // Likely a server entry rather than a channel.
+                return@mapNotNull null
+            }
+
+            val resolvedMpd = when {
+                !mpdRaw.isNullOrBlank() -> mpdRaw
+                !m3uRaw.isNullOrBlank() && m3uRaw.contains(".mpd", true) -> m3uRaw
+                type?.contains("dash", true) == true && !m3uRaw.isNullOrBlank() -> m3uRaw
+                else -> null
+            }
+
+            val resolvedM3u8 = when {
+                !m3uRaw.isNullOrBlank() && m3uRaw.contains(".m3u", true) -> m3uRaw
+                resolvedMpd == null && !m3uRaw.isNullOrBlank() -> m3uRaw
+                else -> null
+            }
+
+            val finalId = id?.trim().orEmpty().ifBlank {
+                resolvedM3u8?.substringAfterLast("/")?.substringBefore("?")?.substringBefore(".")
+                    ?: resolvedMpd?.substringAfterLast("/")?.substringBefore("?")?.substringBefore(".")
+                    ?: ""
+            }
+            val finalName = name?.trim().orEmpty().ifBlank {
+                finalId.ifBlank { "Unknown" }
+            }
+
+            if (finalName.isBlank() || (resolvedMpd.isNullOrBlank() && resolvedM3u8.isNullOrBlank())) {
+                return@mapNotNull null
+            }
+
+            CloudChannel(
+                type = type,
+                id = finalId,
+                name = finalName,
+                group = group?.trim(),
+                language = language?.trim(),
+                logo = logo?.trim(),
+                userAgent = userAgent?.trim(),
+                mpdUrl = resolvedMpd?.trim(),
+                m3u8Url = resolvedM3u8?.trim(),
+                licenseUrl = licenseUrl?.trim(),
+                headers = headers,
+                expiresIn = expiresIn?.trim()
+            )
+        }
+
+        return items.distinctBy { it.id.ifBlank { it.name } }
+    }
+
+    fun extractFirstUrl(body: String): String? {
+        return urlRegex.find(body)?.value
     }
 
     private fun findFirstJsonArray(root: JsonElement): JsonArray? {
