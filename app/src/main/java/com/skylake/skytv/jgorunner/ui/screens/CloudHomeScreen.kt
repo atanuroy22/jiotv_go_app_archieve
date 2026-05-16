@@ -314,13 +314,35 @@ fun CloudHomeScreen(
             titleContentColor = Color.White
         )
 
-        if (showHiddenServersDialog) {
-            val optionLabels = serverOptions.map { it.first }
-            val urlByLabel = serverOptions.toMap()
-            val selectedLabels = hiddenServerUrls.mapNotNull { url ->
-                serverOptions.firstOrNull { it.second == url }?.first
-            }.toSet()
     }
+
+    if (showHiddenServersDialog) {
+    val serverOptions = remember(allServers) {
+        allServers.map { server -> server.name to server.url }
+    }
+    val optionLabels = serverOptions.map { it.first }
+    val urlByLabel = serverOptions.toMap()
+    val selectedLabels = remember(hiddenServerUrls, allServers) {
+        hiddenServerUrls.mapNotNull { url ->
+            serverOptions.firstOrNull { it.second == url }?.first
+        }.toSet()
+    }
+
+    MultiSelectFilterDialog(
+        title = "Hidden Servers",
+        options = optionLabels,
+        selectedOptions = selectedLabels,
+        onDismiss = { showHiddenServersDialog = false },
+        onConfirm = { newSelectedLabels ->
+            val newHidden = allServers
+                .filter { server -> server.name in newSelectedLabels }
+                .map { it.url }
+            preferenceManager.myPrefs.cloudHiddenServerUrls = gson.toJson(newHidden)
+            preferenceManager.savePreferences()
+            showHiddenServersDialog = false
+            refreshTrigger++
+        }
+    )
 }
 
 }

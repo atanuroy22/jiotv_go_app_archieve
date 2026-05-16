@@ -158,7 +158,6 @@ fun CloudPlayerScreen(
                     builder.header("Sec-Fetch-Mode", "cors")
                     builder.header("Sec-Fetch-Site", "same-origin")
                     builder.header("Sec-Fetch-Dest", "empty")
-                    builder.header("User-Agent", jioUA)
                 }
 
                 chain.proceed(builder.build())
