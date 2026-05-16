@@ -306,7 +306,7 @@ object CloudParsers {
             )
         }
 
-        return items.distinctBy { it.id.ifBlank { it.name } }
+        return items.distinctBy { it.id?.ifBlank { it.name } ?: it.name }
     }
 
     fun extractFirstUrl(body: String): String? {
