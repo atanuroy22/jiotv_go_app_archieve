@@ -6,40 +6,41 @@ import org.junit.Test
 
 class CloudServerSelectorsTest {
     @Test
-    fun selectSecondSdServer_returnsSecondSdEntry() {
+    fun selectSdServerWithFallback_returnsSecondSdEntry() {
         val servers = listOf(
             CloudServer(name = "Zee5 HD 1", url = "https://example.com/hd1.m3u", logo = ""),
             CloudServer(name = "Zee5 SD 1", url = "https://example.com/sd1.m3u", logo = ""),
             CloudServer(name = "Zee5 SD 2", url = "https://example.com/sd2.m3u", logo = "")
         )
 
-        val selected = selectSecondSdServer(servers)
+        val selected = selectSdServerWithFallback(servers)
 
         assertEquals(1, selected.size)
         assertEquals("https://example.com/sd2.m3u", selected[0].url)
     }
 
     @Test
-    fun selectSecondSdServer_returnsEmptyWhenOnlyOneSd() {
+    fun selectSdServerWithFallback_returnsFirstSdWhenOnlyOneSd() {
         val servers = listOf(
             CloudServer(name = "Zee5 SD 1", url = "https://example.com/sd1.m3u", logo = ""),
             CloudServer(name = "Zee5 HD 1", url = "https://example.com/hd1.m3u", logo = "")
         )
 
-        val selected = selectSecondSdServer(servers)
+        val selected = selectSdServerWithFallback(servers)
 
-        assertEquals(0, selected.size)
+        assertEquals(1, selected.size)
+        assertEquals("https://example.com/sd1.m3u", selected[0].url)
     }
 
     @Test
-    fun selectSecondSdServer_returnsEmptyWhenNoSd() {
+    fun selectSdServerWithFallback_returnsAllWhenNoSd() {
         val servers = listOf(
             CloudServer(name = "Zee5 HD 1", url = "https://example.com/hd1.m3u", logo = ""),
             CloudServer(name = "Zee5 HD 2", url = "https://example.com/hd2.m3u", logo = "")
         )
 
-        val selected = selectSecondSdServer(servers)
+        val selected = selectSdServerWithFallback(servers)
 
-        assertEquals(0, selected.size)
+        assertEquals(servers, selected)
     }
 }
