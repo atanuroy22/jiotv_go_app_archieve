@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,7 +54,7 @@ fun ChannelGridTV(
     val focusRequester = remember { FocusRequester() }
     val preferenceManager = remember { SkySharedPref.getInstance(context) }
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 100.dp),
+        columns = GridCells.Adaptive(minSize = 140.dp),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -61,10 +62,11 @@ fun ChannelGridTV(
     ) {
         items(channels, key = { it.url }) { channel ->
             var isFocused by remember { mutableStateOf(false) }
+            val borderColor = if (isSystemInDarkTheme()) Color(0xFF00BCD4) else Color(0xFFFFD700)
 
             Card(
                 modifier = Modifier
-                    .height(120.dp)
+                    .height(160.dp)
                     .focusRequester(focusRequester)
                     .onFocusChanged { focusState ->
                         isFocused = focusState.isFocused
@@ -149,7 +151,7 @@ fun ChannelGridTV(
                             }
                         }
                     ),
-                border = if (isFocused) BorderStroke(4.dp, Color(0xFFFFD700)) else null,
+                border = if (isFocused) BorderStroke(5.dp, borderColor) else null,
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
@@ -159,14 +161,14 @@ fun ChannelGridTV(
                     contentDescription = "${channel.name} logo",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(80.dp),
+                        .height(110.dp),
                     contentScale = ContentScale.Fit
                 )
                 Text(
                     text = channel.name,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     modifier = Modifier.padding(8.dp)
                 )
             }
@@ -185,17 +187,18 @@ fun ChannelGridMain(
 ) {
     val basefinURL = "http://localhost:$localPORT"
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 100.dp),
+        columns = GridCells.Adaptive(minSize = 140.dp),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         items(filteredChannels) { channel ->
             var isFocused by remember { mutableStateOf(false) }
+            val borderColor = if (isSystemInDarkTheme()) Color(0xFF00BCD4) else Color(0xFFFFD700)
 
             Card(
                 modifier = Modifier
-                    .height(120.dp)
+                    .height(160.dp)
                     .onFocusChanged { focusState ->
                         isFocused = focusState.isFocused
                         if (focusState.isFocused) {
@@ -296,7 +299,7 @@ fun ChannelGridMain(
                             }
                         }
                     ),
-                border = if (isFocused) BorderStroke(4.dp, Color(0xFFFFD700)) else null,
+                border = if (isFocused) BorderStroke(5.dp, borderColor) else null,
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
@@ -308,12 +311,12 @@ fun ChannelGridMain(
                     contentDescription = channel.channel_name,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(80.dp),
+                        .height(110.dp),
                     contentScale = ContentScale.Fit
                 )
                 Text(
                     text = channel.channel_name,
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     modifier = Modifier.padding(8.dp)
                 )
             }
