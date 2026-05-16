@@ -250,11 +250,33 @@ object CloudParsers {
 
             val licenseUrl = obj.firstStringOf("license_url", "licenseUrl", "license", "drm_license", "drm", "license_url")
 
-            val headers = obj.get("headers")?.takeIf { it.isJsonObject }?.asJsonObject?.let { headerObj ->
-                headerObj.entrySet().mapNotNull { (k, v) ->
-                    val value = if (v.isJsonPrimitive) v.asJsonPrimitive.asString else null
-                    value?.let { k to it }
-                }.toMap()
+            val headers = obj.get("headers")?.let { headersElement ->
+                when {
+                    headersElement.isJsonObject -> {
+                        headersElement.asJsonObject.entrySet().mapNotNull { (k, v) ->
+                            val value = if (v.isJsonPrimitive) v.asJsonPrimitive.asString else null
+                            value?.let { k to it }
+                        }.toMap()
+                    }
+                    headersElement.isJsonArray -> {
+                        headersElement.asJsonArray.mapNotNull { el ->
+                            if (!el.isJsonPrimitive) return@mapNotNull null
+                            val line = el.asString
+                            val parts = line.split(":", limit = 2)
+                            if (parts.size < 2) return@mapNotNull null
+                            parts[0].trim() to parts[1].trim()
+                        }.toMap()
+                    }
+                    headersElement.isJsonPrimitive -> {
+                        val raw = headersElement.asString
+                        raw.split("\n", ";").mapNotNull { line ->
+                            val parts = line.split(":", limit = 2)
+                            if (parts.size < 2) return@mapNotNull null
+                            parts[0].trim() to parts[1].trim()
+                        }.toMap()
+                    }
+                    else -> null
+                }
             }
 
             val expiresIn = obj.firstStringOf("expires_in", "expiresIn", "expiry", "exp")

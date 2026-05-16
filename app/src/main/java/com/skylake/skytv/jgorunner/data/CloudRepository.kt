@@ -124,7 +124,14 @@ class CloudRepository(private val context: Context) {
     }
 
     private fun filterCloudChannels(channels: List<CloudChannel>): List<CloudChannel> {
-        return channels.filterNot { it.name.equals("cloudchannel", ignoreCase = true) }
+        return channels.filterNot { channel ->
+            val name = channel.name.trim()
+            name.equals("cloudchannel", ignoreCase = true) ||
+                name.equals("cloud play", ignoreCase = true) ||
+                name.equals("cloudplay", ignoreCase = true) ||
+                name.contains("cloud play", ignoreCase = true) ||
+                name.contains("cloudplay", ignoreCase = true)
+        }
     }
 
     private fun localBaseServerUrl(): String =
