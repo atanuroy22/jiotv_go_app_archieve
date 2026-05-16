@@ -28,9 +28,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -66,12 +63,9 @@ fun CloudHomeScreen(
 
     var allServers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
-    var countdown by remember { mutableIntStateOf(5) }
-    var isAutoplayActive by remember { mutableStateOf(false) }
     var showCouponDialog by remember { mutableStateOf(false) }
     var showSettingsPanel by remember { mutableStateOf(false) }
     var showHiddenServersDialog by remember { mutableStateOf(false) }
-    var showAutoplayServerDialog by remember { mutableStateOf(false) }
 
     var refreshTrigger by remember { mutableIntStateOf(0) }
 
@@ -87,57 +81,51 @@ fun CloudHomeScreen(
         }
     }
 
-    val autoplayServerUrl = preferenceManager.myPrefs.cloudAutoplayServerUrl
-    var autoplayDelaySeconds by remember { mutableIntStateOf(preferenceManager.myPrefs.cloudAutoplayDelaySeconds) }
-    var showAutoplayDelayMenu by remember { mutableStateOf(false) }
-
     val focusRequester = remember { FocusRequester() }
+    val serverFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
 
     LaunchedEffect(refreshTrigger) {
         val jioServers = repository.fetchServers(JIO_SERVER_LIST_URL)
         val zee5Servers = selectSdServerWithFallback(repository.fetchServers(ZEE5_SERVER_LIST_URL))
         val sonyServers = repository.fetchServers(SONY_SERVER_LIST_URL)
         val sportsServers = repository.fetchServers(SPORTS_SERVER_LIST_URL)
-        val fetched = (jioServers + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
+        
         val freeJio = CloudServer(
             name = "Free Jio",
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
             logo = "https://iili.io/f1zkPwP.md.png"
         )
-
+        
+        // Reorder: Jio first, then Free Jio, then others. Hide Zee5 and Sports by default.
         val baseList = if (isSubscribed) {
-            fetched + freeJio
+            (jioServers + listOf(freeJio) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
         } else {
             listOf(freeJio)
         }
 
-        val visibleServers = baseList.filter { it.url !in hiddenServerUrls }
+        var currentHiddenUrls = hiddenServerUrls.toMutableList()
+        
+        // Set default hidden servers on first run
+        if (hiddenServerUrls.isEmpty() && isSubscribed && baseList.isNotEmpty()) {
+            currentHiddenUrls = baseList
+                .filter { server ->
+                    // Hide Zee5 and Sports (Cricket, etc) by default. Keep JioTV+, Sony, Free Jio visible
+                    server.name.contains("zee", ignoreCase = true) ||
+                    server.name.contains("cricket", ignoreCase = true) ||
+                    (server.name.contains("sport", ignoreCase = true) && !server.name.contains("sony", ignoreCase = true))
+                }
+                .map { it.url }
+                .toMutableList()
+            
+            if (currentHiddenUrls.isNotEmpty()) {
+                preferenceManager.myPrefs.cloudHiddenServerUrls = gson.toJson(currentHiddenUrls)
+                preferenceManager.savePreferences()
+            }
+        }
+
+        val visibleServers = baseList.filter { it.url !in currentHiddenUrls }
         allServers = baseList
         servers = visibleServers
-    }
-
-    LaunchedEffect(autoplayDelaySeconds, servers, autoplayServerUrl) {
-        if (autoplayDelaySeconds > 0 && servers.isNotEmpty()) {
-            isAutoplayActive = true
-            countdown = autoplayDelaySeconds
-            while (countdown > 0 && autoplayDelaySeconds > 0 && isAutoplayActive) {
-                delay(1000)
-                countdown--
-            }
-            if (countdown == 0 && autoplayDelaySeconds > 0 && isAutoplayActive) {
-                val target = servers.firstOrNull { it.url == autoplayServerUrl } ?: servers.first()
-                onServerSelected(target)
-            }
-        } else {
-            isAutoplayActive = false
-        }
-    }
-
-    LaunchedEffect(hiddenServerUrls, autoplayServerUrl) {
-        if (autoplayServerUrl != null && autoplayServerUrl in hiddenServerUrls) {
-            preferenceManager.myPrefs.cloudAutoplayServerUrl = null
-            preferenceManager.savePreferences()
-        }
     }
 
     BackHandler {
@@ -148,15 +136,6 @@ fun CloudHomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0A0A0A))
-            .clickable(enabled = isAutoplayActive) {
-                isAutoplayActive = false
-            }
-            .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && isAutoplayActive) {
-                    isAutoplayActive = false
-                }
-                false
-            }
     ) {
         Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
@@ -209,10 +188,11 @@ fun CloudHomeScreen(
                     modifier = Modifier.weight(1f).focusRequester(focusRequester)
                 ) {
                     items(servers) { server ->
+                        val itemFocusRequester = serverFocusRequesters.getOrPut(server.url) { FocusRequester() }
                         ServerCard(
                             server = server,
+                            modifier = Modifier.focusRequester(itemFocusRequester),
                             onSelected = {
-                                isAutoplayActive = false
                                 onServerSelected(server)
                             }
                         )
@@ -223,15 +203,6 @@ fun CloudHomeScreen(
                     delay(500)
                     try { focusRequester.requestFocus() } catch(_: Exception) {}
                 }
-            }
-
-            if (isAutoplayActive && servers.isNotEmpty()) {
-                Text(
-                    text = "Autoplay in $countdown... Any key or touch to cancel",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(vertical = 10.dp)
-                )
             }
 
             // Footer info
@@ -252,10 +223,9 @@ fun CloudHomeScreen(
                         color = if (isSubscribed) Color.Green else Color.Yellow,
                         fontSize = 11.sp
                     )
-                    val autoplayName = allServers.firstOrNull { it.url == autoplayServerUrl }?.name ?: "Auto"
                     val hiddenCount = hiddenServerUrls.size
                     Text(
-                        text = "Autoplay: $autoplayName | Hidden: $hiddenCount",
+                        text = "Hidden: $hiddenCount",
                         color = Color.Gray,
                         fontSize = 10.sp
                     )
@@ -314,54 +284,16 @@ fun CloudHomeScreen(
                 server.name to server.url
             }
         }
-        val autoplayDelayOptions = listOf(0, 3, 5, 10, 15, 20, 30)
-        val autoplayDelayLabels = mapOf(
-            0 to "Never",
-            3 to "3 sec",
-            5 to "5 sec",
-            10 to "10 sec",
-            15 to "15 sec",
-            20 to "20 sec",
-            30 to "30 sec"
-        )
 
         AlertDialog(
             onDismissRequest = { showSettingsPanel = false },
             title = { Text("Cloud Settings", fontSize = 16.sp, color = Color.Cyan) },
             text = {
                 Column {
-                    Box {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showAutoplayDelayMenu = true }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Schedule, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("Autoplay: ${autoplayDelayLabels[autoplayDelaySeconds]}", color = Color.White)
-                        }
-                        DropdownMenu(
-                            expanded = showAutoplayDelayMenu,
-                            onDismissRequest = { showAutoplayDelayMenu = false }
-                        ) {
-                            autoplayDelayOptions.forEach { seconds ->
-                                DropdownMenuItem(
-                                    text = { Text(autoplayDelayLabels[seconds] ?: "Unknown") },
-                                    onClick = {
-                                        autoplayDelaySeconds = seconds
-                                        preferenceManager.myPrefs.cloudAutoplayDelaySeconds = seconds
-                                        preferenceManager.savePreferences()
-                                        showAutoplayDelayMenu = false
-                                    }
-                                )
-                            }
-                        }
-                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .focusable()
                             .clickable { showHiddenServersDialog = true }
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -369,18 +301,6 @@ fun CloudHomeScreen(
                         Icon(Icons.Default.VisibilityOff, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(12.dp))
                         Text("Hidden Servers (${hiddenServerUrls.size})", color = Color.White)
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showAutoplayServerDialog = true }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.PlayCircle, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
-                        val autoplayName = servers.firstOrNull { it.url == autoplayServerUrl }?.name ?: "Auto"
-                        Text("Autoplay Server: $autoplayName", color = Color.White)
                     }
                 }
             },
@@ -400,42 +320,6 @@ fun CloudHomeScreen(
             val selectedLabels = hiddenServerUrls.mapNotNull { url ->
                 serverOptions.firstOrNull { it.second == url }?.first
             }.toSet()
-
-            MultiSelectFilterDialog(
-                title = "Hidden Servers",
-                options = optionLabels,
-                selectedOptions = selectedLabels,
-                onDismiss = { showHiddenServersDialog = false },
-                onConfirm = { selected ->
-                    val urls = selected.mapNotNull { label -> urlByLabel[label] }
-                    preferenceManager.myPrefs.cloudHiddenServerUrls = gson.toJson(urls)
-                    preferenceManager.savePreferences()
-                    showHiddenServersDialog = false
-                    refreshTrigger++
-                }
-            )
-        }
-
-        if (showAutoplayServerDialog) {
-            val optionLabels = servers.map { it.name }
-            val urlByLabel = serverOptions.toMap()
-            val selectedLabel = servers.firstOrNull { it.url == autoplayServerUrl }?.name
-
-            MultiSelectFilterDialog(
-                title = "Autoplay Server",
-                options = optionLabels,
-                selectedOptions = if (selectedLabel == null) emptySet() else setOf(selectedLabel),
-                singleSelect = true,
-                onDismiss = { showAutoplayServerDialog = false },
-                onConfirm = { selected ->
-                    val url = selected.firstOrNull()?.let { urlByLabel[it] }
-                    preferenceManager.myPrefs.cloudAutoplayServerUrl = url
-                    preferenceManager.savePreferences()
-                    showAutoplayServerDialog = false
-                    refreshTrigger++
-                }
-            )
-        }
     }
 }
 

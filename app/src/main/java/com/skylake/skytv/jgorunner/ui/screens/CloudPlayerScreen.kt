@@ -581,8 +581,6 @@ fun CloudPlayerScreen(
             )
         }
 
-        var showPlayerLogDialog by remember { mutableStateOf(false) }
-
         if (playerError != null && !isSilentTransition) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
@@ -592,32 +590,16 @@ fun CloudPlayerScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(playerError!!, color = Color.Gray, fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     Spacer(modifier = Modifier.height(24.dp))
-                    Row {
-                        Button(onClick = {
-                            playerError = null
-                            val c = currentIndex
-                            currentIndex = -1
-                            scope.launch { delay(100); currentIndex = c }
-                        }) {
-                            Text("Retry")
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Button(
-                            onClick = { showPlayerLogDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
-                        ) {
-                            Text("Show Logs")
-                        }
+                    Button(onClick = {
+                        playerError = null
+                        val c = currentIndex
+                        currentIndex = -1
+                        scope.launch { delay(100); currentIndex = c }
+                    }) {
+                        Text("Retry")
                     }
                 }
             }
-        }
-
-        if (showPlayerLogDialog) {
-            LogViewerDialog(
-                onDismiss = { showPlayerLogDialog = false },
-                onCopy = { LogCollector.copyToClipboard(context) }
-            )
         }
     }
 }

@@ -609,7 +609,11 @@ fun CloudMainScreen(
     if (showLogDialog) {
         LogViewerDialog(
             onDismiss = { showLogDialog = false },
-            onCopy = { LogCollector.copyToClipboard(context) }
+            onCopy = { LogCollector.copyToClipboard(context) },
+            onClear = {
+                LogCollector.clear()
+                Toast.makeText(context, "Logs cleared", Toast.LENGTH_SHORT).show()
+            }
         )
     }
 }
@@ -782,16 +786,17 @@ fun SettingsActionItemCompact(
 }
 
 @Composable
-fun LogViewerDialog(onDismiss: () -> Unit, onCopy: () -> Unit) {
+fun LogViewerDialog(onDismiss: () -> Unit, onCopy: () -> Unit, onClear: () -> Unit) {
+    var refreshTick by remember { mutableIntStateOf(0) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("App Logs", fontSize = 16.sp, color = Color.Cyan) },
         text = {
-            val logs = remember { LogCollector.getLogs() }
+            val logs = remember(refreshTick) { LogCollector.getLogs() }
             Box(modifier = Modifier.height(300.dp).fillMaxWidth().background(Color.Black).padding(8.dp)) {
                 val scrollState = rememberScrollState()
                 Text(
-                    text = logs,
+                    text = if (logs.isBlank()) "No logs yet." else logs,
                     color = Color.Green,
                     fontSize = 10.sp,
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
@@ -800,7 +805,16 @@ fun LogViewerDialog(onDismiss: () -> Unit, onCopy: () -> Unit) {
             }
         },
         confirmButton = {
-            Button(onClick = onCopy) { Text("Copy") }
+            Row {
+                TextButton(onClick = {
+                    onClear()
+                    refreshTick++
+                }) {
+                    Text("Clear")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(onClick = onCopy) { Text("Copy") }
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Close") }
