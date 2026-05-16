@@ -162,12 +162,6 @@ fun CloudMainScreen(
             currentServer = servers.firstOrNull()
         }
     }
-+
-+    LaunchedEffect(hiddenServerUrls, servers) {
-+        if (currentServer?.url in hiddenServerUrls || currentServer?.url == null || servers.none { it.url == currentServer?.url }) {
-+            currentServer = servers.firstOrNull()
-+        }
-+    }
 
     LaunchedEffect(isSearchVisible) {
         if (isSearchVisible) {
