@@ -158,12 +158,16 @@ fun CloudMainScreen(
         )
         val visibleServers = (fetched + freeJio).filter { it.url !in hiddenServerUrls }
         servers = visibleServers
-        if (currentServer == null) {
-            currentServer = servers.firstOrNull()
-        } else if (currentServer?.url in hiddenServerUrls) {
+        if (currentServer == null || currentServer?.url in hiddenServerUrls) {
             currentServer = servers.firstOrNull()
         }
     }
++
++    LaunchedEffect(hiddenServerUrls, servers) {
++        if (currentServer?.url in hiddenServerUrls || currentServer?.url == null || servers.none { it.url == currentServer?.url }) {
++            currentServer = servers.firstOrNull()
++        }
++    }
 
     LaunchedEffect(isSearchVisible) {
         if (isSearchVisible) {
