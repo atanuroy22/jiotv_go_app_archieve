@@ -26,6 +26,7 @@ fun MultiSelectFilterDialog(
     title: String,
     options: List<String>,
     selectedOptions: Set<String>,
+    singleSelect: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: (Set<String>) -> Unit
 ) {
@@ -51,10 +52,14 @@ fun MultiSelectFilterDialog(
                             label = option,
                             isSelected = currentSelection.contains(option),
                             onToggle = { selected ->
-                                currentSelection = if (selected) {
-                                    currentSelection + option
+                                currentSelection = if (singleSelect) {
+                                    if (selected) setOf(option) else emptySet()
                                 } else {
-                                    currentSelection - option
+                                    if (selected) {
+                                        currentSelection + option
+                                    } else {
+                                        currentSelection - option
+                                    }
                                 }
                             }
                         )

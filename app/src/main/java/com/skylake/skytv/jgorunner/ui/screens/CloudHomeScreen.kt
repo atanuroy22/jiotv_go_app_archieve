@@ -28,14 +28,20 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.skylake.skytv.jgorunner.data.CloudRepository
 import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.data.selectSdServerWithFallback
+import com.skylake.skytv.jgorunner.ui.components.MultiSelectFilterDialog
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import kotlinx.coroutines.delay
 import java.util.Calendar
@@ -46,6 +52,7 @@ import java.util.Locale
 private const val JIO_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/jiotv+.json"
 private const val ZEE5_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/zee5.json"
 private const val SONY_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sony.json"
+private const val SPORTS_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sports.json"
 
 @Composable
 fun CloudHomeScreen(
@@ -55,16 +62,32 @@ fun CloudHomeScreen(
 ) {
     val preferenceManager = SkySharedPref.getInstance(context)
     val repository = remember { CloudRepository(context) }
+    val gson = remember { Gson() }
 
+    var allServers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var countdown by remember { mutableIntStateOf(5) }
     var isAutoplayActive by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayEnabled) }
     var showCouponDialog by remember { mutableStateOf(false) }
+    var showSettingsPanel by remember { mutableStateOf(false) }
+    var showHiddenServersDialog by remember { mutableStateOf(false) }
+    var showAutoplayServerDialog by remember { mutableStateOf(false) }
 
     var refreshTrigger by remember { mutableIntStateOf(0) }
 
     val subExpiry = remember(refreshTrigger) { preferenceManager.myPrefs.cloudSubExpiry }
     val isSubscribed = remember(subExpiry) { subExpiry > System.currentTimeMillis() }
+
+    val hiddenServersJson = preferenceManager.myPrefs.cloudHiddenServerUrls ?: "[]"
+    val hiddenServerUrls = remember(hiddenServersJson) {
+        try {
+            gson.fromJson<List<String>>(hiddenServersJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    val autoplayServerUrl = preferenceManager.myPrefs.cloudAutoplayServerUrl
 
     val focusRequester = remember { FocusRequester() }
 
@@ -72,28 +95,35 @@ fun CloudHomeScreen(
         val jioServers = repository.fetchServers(JIO_SERVER_LIST_URL)
         val zee5Servers = selectSdServerWithFallback(repository.fetchServers(ZEE5_SERVER_LIST_URL))
         val sonyServers = repository.fetchServers(SONY_SERVER_LIST_URL)
-        val fetched = (jioServers + zee5Servers + sonyServers).distinctBy { it.url }
+        val sportsServers = repository.fetchServers(SPORTS_SERVER_LIST_URL)
+        val fetched = (jioServers + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
         val freeJio = CloudServer(
             name = "Free Jio",
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
             logo = "https://iili.io/f1zkPwP.md.png"
         )
 
-        servers = if (isSubscribed) {
+        val baseList = if (isSubscribed) {
             fetched + freeJio
         } else {
             listOf(freeJio)
         }
+
+        val visibleServers = baseList.filter { it.url !in hiddenServerUrls }
+        allServers = baseList
+        servers = visibleServers
     }
 
-    LaunchedEffect(isAutoplayActive, servers) {
+    LaunchedEffect(isAutoplayActive, servers, autoplayServerUrl) {
         if (isAutoplayActive && servers.isNotEmpty()) {
-            while (countdown > 0) {
+            countdown = 5
+            while (countdown > 0 && isAutoplayActive) {
                 delay(1000)
                 countdown--
             }
-            if (countdown == 0) {
-                onServerSelected(servers.first())
+            if (countdown == 0 && isAutoplayActive) {
+                val target = servers.firstOrNull { it.url == autoplayServerUrl } ?: servers.first()
+                onServerSelected(target)
             }
         }
     }
@@ -109,17 +139,32 @@ fun CloudHomeScreen(
             .clickable(enabled = isAutoplayActive) {
                 isAutoplayActive = false
             }
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && isAutoplayActive) {
+                    isAutoplayActive = false
+                }
+                false
+            }
     ) {
         Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "Cloud Play",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Cyan
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Cloud Play",
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Cyan,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { showSettingsPanel = true }) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.Cyan)
+                }
+            }
             Text(
                 text = "Select a server to start streaming",
                 fontSize = 14.sp,
@@ -129,7 +174,18 @@ fun CloudHomeScreen(
 
             if (servers.isEmpty()) {
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color.Cyan)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Color.Cyan)
+                        if (allServers.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "All servers are hidden. Open settings to unhide.",
+                                color = Color.Gray,
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
             } else {
                 // Changed to Vertical Grid to fit mobile and TV without horizontal hiding
@@ -159,7 +215,7 @@ fun CloudHomeScreen(
 
             if (isAutoplayActive && servers.isNotEmpty()) {
                 Text(
-                    text = "Autoplay in $countdown... Any key to cancel",
+                    text = "Autoplay in $countdown... Any key or touch to cancel",
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 14.sp,
                     modifier = Modifier.padding(vertical = 10.dp)
@@ -178,12 +234,20 @@ fun CloudHomeScreen(
                     "🎉 Get Jio+ & Sports at Lowest Price!"
                 }
 
-                Text(
-                    text = expiryText,
-                    color = if (isSubscribed) Color.Green else Color.Yellow,
-                    fontSize = 11.sp,
-                    modifier = Modifier.weight(1f)
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = expiryText,
+                        color = if (isSubscribed) Color.Green else Color.Yellow,
+                        fontSize = 11.sp
+                    )
+                    val autoplayName = allServers.firstOrNull { it.url == autoplayServerUrl }?.name ?: "Auto"
+                    val hiddenCount = hiddenServerUrls.size
+                    Text(
+                        text = "Autoplay: $autoplayName | Hidden: $hiddenCount",
+                        color = Color.Gray,
+                        fontSize = 10.sp
+                    )
+                }
 
                 if (isSubscribed) {
                     TextButton(onClick = {
@@ -230,6 +294,98 @@ fun CloudHomeScreen(
                 }
             }
         )
+    }
+
+    if (showSettingsPanel) {
+        val serverOptions = remember(allServers) {
+            allServers.map { server ->
+                val label = "${server.name} (${server.url})"
+                label to server.url
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showSettingsPanel = false },
+            title = { Text("Cloud Settings", fontSize = 16.sp, color = Color.Cyan) },
+            text = {
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showHiddenServersDialog = true }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.VisibilityOff, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("Hidden Servers (${hiddenServerUrls.size})", color = Color.White)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showAutoplayServerDialog = true }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.PlayCircle, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        val autoplayName = allServers.firstOrNull { it.url == autoplayServerUrl }?.name ?: "Auto"
+                        Text("Autoplay Server: $autoplayName", color = Color.White)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSettingsPanel = false }) {
+                    Text("Close", color = Color.Cyan)
+                }
+            },
+            containerColor = Color(0xFF1A1A1A),
+            textContentColor = Color.White,
+            titleContentColor = Color.White
+        )
+
+        if (showHiddenServersDialog) {
+            val optionLabels = serverOptions.map { it.first }
+            val urlByLabel = serverOptions.toMap()
+            val selectedLabels = hiddenServerUrls.mapNotNull { url ->
+                serverOptions.firstOrNull { it.second == url }?.first
+            }.toSet()
+
+            MultiSelectFilterDialog(
+                title = "Hidden Servers",
+                options = optionLabels,
+                selectedOptions = selectedLabels,
+                onDismiss = { showHiddenServersDialog = false },
+                onConfirm = { selected ->
+                    val urls = selected.mapNotNull { label -> urlByLabel[label] }
+                    preferenceManager.myPrefs.cloudHiddenServerUrls = gson.toJson(urls)
+                    preferenceManager.savePreferences()
+                    showHiddenServersDialog = false
+                    refreshTrigger++
+                }
+            )
+        }
+
+        if (showAutoplayServerDialog) {
+            val optionLabels = serverOptions.map { it.first }
+            val urlByLabel = serverOptions.toMap()
+            val selectedLabel = serverOptions.firstOrNull { it.second == autoplayServerUrl }?.first
+
+            MultiSelectFilterDialog(
+                title = "Autoplay Server",
+                options = optionLabels,
+                selectedOptions = if (selectedLabel == null) emptySet() else setOf(selectedLabel),
+                singleSelect = true,
+                onDismiss = { showAutoplayServerDialog = false },
+                onConfirm = { selected ->
+                    val url = selected.firstOrNull()?.let { urlByLabel[it] }
+                    preferenceManager.myPrefs.cloudAutoplayServerUrl = url
+                    preferenceManager.savePreferences()
+                    showAutoplayServerDialog = false
+                    refreshTrigger++
+                }
+            )
+        }
     }
 }
 

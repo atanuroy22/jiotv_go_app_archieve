@@ -63,6 +63,7 @@ import kotlinx.coroutines.launch
 private const val JIO_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/jiotv+.json"
 private const val ZEE5_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/zee5.json"
 private const val SONY_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sony.json"
+private const val SPORTS_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sports.json"
 
 @Composable
 fun CloudMainScreen(
@@ -93,6 +94,15 @@ fun CloudMainScreen(
             gson.fromJson<Map<String, Set<String>>>(serverFiltersJson, type) ?: mutableMapOf()
         } catch (e: Exception) {
             mutableMapOf<String, Set<String>>()
+        }
+    }
+
+    val hiddenServersJson = preferenceManager.myPrefs.cloudHiddenServerUrls ?: "[]"
+    val hiddenServerUrls = remember(hiddenServersJson) {
+        try {
+            gson.fromJson<List<String>>(hiddenServersJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
@@ -139,14 +149,18 @@ fun CloudMainScreen(
         val jioServers = repository.fetchServers(JIO_SERVER_LIST_URL)
         val zee5Servers = selectSdServerWithFallback(repository.fetchServers(ZEE5_SERVER_LIST_URL))
         val sonyServers = repository.fetchServers(SONY_SERVER_LIST_URL)
-        val fetched = (jioServers + zee5Servers + sonyServers).distinctBy { it.url }
+        val sportsServers = repository.fetchServers(SPORTS_SERVER_LIST_URL)
+        val fetched = (jioServers + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
         val freeJio = CloudServer(
             name = "Free Jio",
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
             logo = "https://iili.io/f1zkPwP.md.png"
         )
-        servers = fetched + freeJio
+        val visibleServers = (fetched + freeJio).filter { it.url !in hiddenServerUrls }
+        servers = visibleServers
         if (currentServer == null) {
+            currentServer = servers.firstOrNull()
+        } else if (currentServer?.url in hiddenServerUrls) {
             currentServer = servers.firstOrNull()
         }
     }
@@ -497,7 +511,15 @@ fun CloudMainScreen(
                 }
             }
 
-            if (isLoadingChannels) {
+            if (servers.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "All servers are hidden. Open CloudHome settings to unhide.",
+                        color = Color.Gray,
+                        fontSize = 12.sp
+                    )
+                }
+            } else if (isLoadingChannels) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = Color.Cyan)
