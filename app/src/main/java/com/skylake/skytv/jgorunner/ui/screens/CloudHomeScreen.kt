@@ -87,7 +87,10 @@ fun CloudHomeScreen(
         }
     }
 
+    var autoplayEnabled by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayEnabled) }
     val autoplayServerUrl = preferenceManager.myPrefs.cloudAutoplayServerUrl
+    var autoplayDelaySeconds by remember { mutableIntStateOf(preferenceManager.myPrefs.cloudAutoplayDelaySeconds.coerceAtLeast(1)) }
+    var showAutoplayDelayMenu by remember { mutableStateOf(false) }
 
     val focusRequester = remember { FocusRequester() }
 
@@ -114,17 +117,27 @@ fun CloudHomeScreen(
         servers = visibleServers
     }
 
-    LaunchedEffect(isAutoplayActive, servers, autoplayServerUrl) {
-        if (isAutoplayActive && servers.isNotEmpty()) {
-            countdown = 5
-            while (countdown > 0 && isAutoplayActive) {
+    LaunchedEffect(autoplayEnabled, servers, autoplayServerUrl, autoplayDelaySeconds) {
+        if (autoplayEnabled && servers.isNotEmpty()) {
+            isAutoplayActive = true
+            countdown = autoplayDelaySeconds.coerceAtLeast(1)
+            while (countdown > 0 && autoplayEnabled && isAutoplayActive) {
                 delay(1000)
                 countdown--
             }
-            if (countdown == 0 && isAutoplayActive) {
+            if (countdown == 0 && autoplayEnabled && isAutoplayActive) {
                 val target = servers.firstOrNull { it.url == autoplayServerUrl } ?: servers.first()
                 onServerSelected(target)
             }
+        } else {
+            isAutoplayActive = false
+        }
+    }
+
+    LaunchedEffect(hiddenServerUrls, autoplayServerUrl) {
+        if (autoplayServerUrl != null && autoplayServerUrl in hiddenServerUrls) {
+            preferenceManager.myPrefs.cloudAutoplayServerUrl = null
+            preferenceManager.savePreferences()
         }
     }
 
@@ -299,16 +312,66 @@ fun CloudHomeScreen(
     if (showSettingsPanel) {
         val serverOptions = remember(allServers) {
             allServers.map { server ->
-                val label = "${server.name} (${server.url})"
-                label to server.url
+                server.name to server.url
             }
         }
+        val autoplayDelayOptions = listOf(3, 5, 10, 15, 20, 30)
 
         AlertDialog(
             onDismissRequest = { showSettingsPanel = false },
             title = { Text("Cloud Settings", fontSize = 16.sp, color = Color.Cyan) },
             text = {
                 Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.PlayCircle, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("Autoplay Enabled", color = Color.White, modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = autoplayEnabled,
+                            onCheckedChange = {
+                                autoplayEnabled = it
+                                preferenceManager.myPrefs.cloudAutoplayEnabled = it
+                                preferenceManager.savePreferences()
+                                if (!it) {
+                                    isAutoplayActive = false
+                                }
+                            }
+                        )
+                    }
+                    Box {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showAutoplayDelayMenu = true }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Schedule, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("Autoplay Delay: $autoplayDelaySeconds sec", color = Color.White)
+                        }
+                        DropdownMenu(
+                            expanded = showAutoplayDelayMenu,
+                            onDismissRequest = { showAutoplayDelayMenu = false }
+                        ) {
+                            autoplayDelayOptions.forEach { seconds ->
+                                DropdownMenuItem(
+                                    text = { Text("$seconds seconds") },
+                                    onClick = {
+                                        autoplayDelaySeconds = seconds
+                                        preferenceManager.myPrefs.cloudAutoplayDelaySeconds = seconds
+                                        preferenceManager.savePreferences()
+                                        showAutoplayDelayMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -329,7 +392,7 @@ fun CloudHomeScreen(
                     ) {
                         Icon(Icons.Default.PlayCircle, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(12.dp))
-                        val autoplayName = allServers.firstOrNull { it.url == autoplayServerUrl }?.name ?: "Auto"
+                        val autoplayName = servers.firstOrNull { it.url == autoplayServerUrl }?.name ?: "Auto"
                         Text("Autoplay Server: $autoplayName", color = Color.White)
                     }
                 }
@@ -367,9 +430,9 @@ fun CloudHomeScreen(
         }
 
         if (showAutoplayServerDialog) {
-            val optionLabels = serverOptions.map { it.first }
+            val optionLabels = servers.map { it.name }
             val urlByLabel = serverOptions.toMap()
-            val selectedLabel = serverOptions.firstOrNull { it.second == autoplayServerUrl }?.first
+            val selectedLabel = servers.firstOrNull { it.url == autoplayServerUrl }?.name
 
             MultiSelectFilterDialog(
                 title = "Autoplay Server",
