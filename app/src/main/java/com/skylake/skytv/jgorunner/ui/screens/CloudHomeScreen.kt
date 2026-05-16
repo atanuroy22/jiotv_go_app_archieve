@@ -67,7 +67,7 @@ fun CloudHomeScreen(
     var allServers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var countdown by remember { mutableIntStateOf(5) }
-    var isAutoplayActive by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayEnabled) }
+    var isAutoplayActive by remember { mutableStateOf(false) }
     var showCouponDialog by remember { mutableStateOf(false) }
     var showSettingsPanel by remember { mutableStateOf(false) }
     var showHiddenServersDialog by remember { mutableStateOf(false) }
@@ -87,9 +87,8 @@ fun CloudHomeScreen(
         }
     }
 
-    var autoplayEnabled by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayEnabled) }
     val autoplayServerUrl = preferenceManager.myPrefs.cloudAutoplayServerUrl
-    var autoplayDelaySeconds by remember { mutableIntStateOf(preferenceManager.myPrefs.cloudAutoplayDelaySeconds.coerceAtLeast(1)) }
+    var autoplayDelaySeconds by remember { mutableIntStateOf(preferenceManager.myPrefs.cloudAutoplayDelaySeconds) }
     var showAutoplayDelayMenu by remember { mutableStateOf(false) }
 
     val focusRequester = remember { FocusRequester() }
@@ -117,15 +116,15 @@ fun CloudHomeScreen(
         servers = visibleServers
     }
 
-    LaunchedEffect(autoplayEnabled, servers, autoplayServerUrl, autoplayDelaySeconds) {
-        if (autoplayEnabled && servers.isNotEmpty()) {
+    LaunchedEffect(autoplayDelaySeconds, servers, autoplayServerUrl) {
+        if (autoplayDelaySeconds > 0 && servers.isNotEmpty()) {
             isAutoplayActive = true
-            countdown = autoplayDelaySeconds.coerceAtLeast(1)
-            while (countdown > 0 && autoplayEnabled && isAutoplayActive) {
+            countdown = autoplayDelaySeconds
+            while (countdown > 0 && autoplayDelaySeconds > 0 && isAutoplayActive) {
                 delay(1000)
                 countdown--
             }
-            if (countdown == 0 && autoplayEnabled && isAutoplayActive) {
+            if (countdown == 0 && autoplayDelaySeconds > 0 && isAutoplayActive) {
                 val target = servers.firstOrNull { it.url == autoplayServerUrl } ?: servers.first()
                 onServerSelected(target)
             }
@@ -315,34 +314,22 @@ fun CloudHomeScreen(
                 server.name to server.url
             }
         }
-        val autoplayDelayOptions = listOf(3, 5, 10, 15, 20, 30)
+        val autoplayDelayOptions = listOf(0, 3, 5, 10, 15, 20, 30)
+        val autoplayDelayLabels = mapOf(
+            0 to "Never",
+            3 to "3 sec",
+            5 to "5 sec",
+            10 to "10 sec",
+            15 to "15 sec",
+            20 to "20 sec",
+            30 to "30 sec"
+        )
 
         AlertDialog(
             onDismissRequest = { showSettingsPanel = false },
             title = { Text("Cloud Settings", fontSize = 16.sp, color = Color.Cyan) },
             text = {
                 Column {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.PlayCircle, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("Autoplay Enabled", color = Color.White, modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = autoplayEnabled,
-                            onCheckedChange = {
-                                autoplayEnabled = it
-                                preferenceManager.myPrefs.cloudAutoplayEnabled = it
-                                preferenceManager.savePreferences()
-                                if (!it) {
-                                    isAutoplayActive = false
-                                }
-                            }
-                        )
-                    }
                     Box {
                         Row(
                             modifier = Modifier
@@ -353,7 +340,7 @@ fun CloudHomeScreen(
                         ) {
                             Icon(Icons.Default.Schedule, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text("Autoplay Delay: $autoplayDelaySeconds sec", color = Color.White)
+                            Text("Autoplay: ${autoplayDelayLabels[autoplayDelaySeconds]}", color = Color.White)
                         }
                         DropdownMenu(
                             expanded = showAutoplayDelayMenu,
@@ -361,7 +348,7 @@ fun CloudHomeScreen(
                         ) {
                             autoplayDelayOptions.forEach { seconds ->
                                 DropdownMenuItem(
-                                    text = { Text("$seconds seconds") },
+                                    text = { Text(autoplayDelayLabels[seconds] ?: "Unknown") },
                                     onClick = {
                                         autoplayDelaySeconds = seconds
                                         preferenceManager.myPrefs.cloudAutoplayDelaySeconds = seconds
