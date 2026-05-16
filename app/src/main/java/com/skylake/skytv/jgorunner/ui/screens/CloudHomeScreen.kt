@@ -323,9 +323,12 @@ fun CloudHomeScreen(
     }
 }
 
+}
+
 @Composable
 fun ServerCard(
     server: CloudServer,
+    modifier: Modifier = Modifier,
     onSelected: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -334,7 +337,7 @@ fun ServerCard(
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .scale(scale)
             .onFocusChanged { isFocused = it.isFocused }
