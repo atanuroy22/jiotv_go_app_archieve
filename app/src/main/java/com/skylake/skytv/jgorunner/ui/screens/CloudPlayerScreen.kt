@@ -58,10 +58,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.dash.DashMediaSource
-import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
-import androidx.media3.exoplayer.drm.FrameworkMediaDrm
+import androidx.media3.exoplayer.drm.DefaultDrmSessionManagerProvider
 import androidx.media3.exoplayer.hls.HlsMediaSource
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
@@ -74,14 +72,12 @@ import com.skylake.skytv.jgorunner.utils.LogCollector
 import com.skylake.skytv.jgorunner.utils.normalizePlaybackUrl
 import com.skylake.skytv.jgorunner.utils.setupCustomPlaybackLogic
 import com.skylake.skytv.jgorunner.utils.cleanupPlaybackLogic
-import com.skylake.skytv.jgorunner.utils.CloudMediaDrmCallback
 import com.skylake.skytv.jgorunner.data.CloudDataManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.util.Calendar
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 @RequiresApi(Build.VERSION_CODES.O)
@@ -302,7 +298,7 @@ fun CloudPlayerScreen(
             dataSourceFactory.setDefaultRequestProperties(defaultRequestProperties)
 
             val useDrm = !ch.licenseUrl.isNullOrBlank() && !isFallbackAttempt
-            val drmSessionManager = if (useDrm) {
+            if (useDrm) {
                 LogCollector.log("Configuring DRM: ${ch.licenseUrl}")
 
                 val isClearKey = ch.licenseUrl.contains("plkey.php", true) ||
@@ -318,29 +314,23 @@ fun CloudPlayerScreen(
                         .setMultiSession(true)
                         .build()
                 )
-
-                val drmCallback = CloudMediaDrmCallback(ch.licenseUrl!!, normalizedHeaders, okHttpClient)
-                DefaultDrmSessionManager.Builder()
-                    .setMultiSession(true)
-                    .setUuidAndExoMediaDrmProvider(drmUuid, FrameworkMediaDrm.DEFAULT_PROVIDER)
-                    .build(drmCallback)
-            } else {
-                null
             }
 
             val mediaItem = builder.build()
+            val dashFactory = DashMediaSource.Factory(dataSourceFactory)
+            val hlsFactory = HlsMediaSource.Factory(dataSourceFactory)
+
+            if (useDrm) {
+                val drmProvider = DefaultDrmSessionManagerProvider()
+                drmProvider.setDrmHttpDataSourceFactory(dataSourceFactory)
+                dashFactory.setDrmSessionManagerProvider(drmProvider)
+                hlsFactory.setDrmSessionManagerProvider(drmProvider)
+            }
+
             val mediaSource = if (isDash) {
-                val factory = DashMediaSource.Factory(dataSourceFactory)
-                if (drmSessionManager != null) {
-                    factory.setDrmSessionManagerProvider { drmSessionManager }
-                }
-                factory.createMediaSource(mediaItem)
+                dashFactory.createMediaSource(mediaItem)
             } else {
-                val factory = HlsMediaSource.Factory(dataSourceFactory)
-                if (drmSessionManager != null) {
-                    factory.setDrmSessionManagerProvider { drmSessionManager }
-                }
-                factory.createMediaSource(mediaItem)
+                hlsFactory.createMediaSource(mediaItem)
             }
 
             exoPlayer.stop()
@@ -619,7 +609,7 @@ fun CloudPlayerOverlay(
                 AsyncImage(
                     model = channel?.logo,
                     contentDescription = null,
-                    modifier = Modifier.size(60.dp).clip(RoundedCornerShape(8.dp))
+                    modifier = Modifier.size(66.dp).clip(RoundedCornerShape(8.dp))
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
@@ -710,7 +700,7 @@ fun CloudSidePanel(
                             .padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AsyncImage(model = channel.logo, contentDescription = null, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)))
+                        AsyncImage(model = channel.logo, contentDescription = null, modifier = Modifier.size(46.dp).clip(RoundedCornerShape(4.dp)))
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = channel.name,

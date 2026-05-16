@@ -698,7 +698,7 @@ fun ChannelGridItemCompact(
                     model = channel.logo,
                     contentDescription = null,
                     modifier = Modifier
-                        .size(50.dp)
+                        .size(56.dp)
                         .clip(RoundedCornerShape(4.dp))
                         .background(Color.White.copy(alpha = 0.05f)),
                     contentScale = ContentScale.Fit
@@ -718,10 +718,10 @@ fun ChannelGridItemCompact(
             Text(
                 text = channel.name,
                 color = Color.White,
-                fontSize = 9.sp,
+                fontSize = 11.sp,
                 maxLines = 2,
                 textAlign = TextAlign.Center,
-                lineHeight = 11.sp,
+                lineHeight = 13.sp,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
             )

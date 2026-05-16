@@ -168,7 +168,7 @@ fun ChannelGridTV(
                     text = channel.name,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    fontSize = 14.sp,
+                    fontSize = 12.sp,
                     modifier = Modifier.padding(8.dp)
                 )
             }
@@ -316,7 +316,7 @@ fun ChannelGridMain(
                 )
                 Text(
                     text = channel.channel_name,
-                    fontSize = 14.sp,
+                    fontSize = 12.sp,
                     modifier = Modifier.padding(8.dp)
                 )
             }

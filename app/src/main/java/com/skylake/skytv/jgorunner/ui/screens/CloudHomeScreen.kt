@@ -349,7 +349,7 @@ fun ServerCard(
             model = server.logo,
             contentDescription = null,
             modifier = Modifier
-                .size(80.dp)
+                .size(88.dp)
                 .clip(RoundedCornerShape(8.dp)),
             contentScale = ContentScale.Fit
         )
