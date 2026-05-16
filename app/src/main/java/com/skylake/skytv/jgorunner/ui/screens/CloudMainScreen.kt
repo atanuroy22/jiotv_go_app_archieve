@@ -163,6 +163,13 @@ fun CloudMainScreen(
         }
     }
 
+    LaunchedEffect(hiddenServerUrls, servers) {
+        val activeUrl = currentServer?.url
+        if (activeUrl == null || activeUrl in hiddenServerUrls || servers.none { it.url == activeUrl }) {
+            currentServer = servers.firstOrNull()
+        }
+    }
+
     LaunchedEffect(isSearchVisible) {
         if (isSearchVisible) {
             searchFocusRequester.requestFocus()
