@@ -678,7 +678,7 @@ fun ChannelGridItemCompact(
     var isFocused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isFocused && focusAnimEnabled) 1.1f else 1.0f)
 
-        Box(
+    Box(
         modifier = modifier
             .width(112.dp)
             .scale(scale)
