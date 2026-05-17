@@ -77,7 +77,7 @@ fun CloudMainScreen(
     val scope = rememberCoroutineScope()
     val gson = remember { Gson() }
 
-    var currentServer by remember { mutableStateOf(initialServer) }
+    var currentServer by remember(initialServer) { mutableStateOf(initialServer) }
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var channels by remember { mutableStateOf<List<CloudChannel>>(emptyList()) }
     var isLoadingChannels by remember { mutableStateOf(false) }
@@ -153,7 +153,7 @@ fun CloudMainScreen(
         val freeJio = CloudServer(
             name = "Free Jio",
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
-            logo = "https://iili.io/f1zkPwP.md.png"
+            logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
         )
         val fetched = (jioServers + listOf(freeJio) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
         val visibleServers = fetched.filter { it.url !in hiddenServerUrls }
@@ -722,10 +722,10 @@ fun ChannelGridItemCompact(
             Text(
                 text = channel.name,
                 color = Color.White,
-                fontSize = 13.sp,
+                fontSize = 18.sp,
                 maxLines = 2,
                 textAlign = TextAlign.Center,
-                lineHeight = 15.sp,
+                lineHeight = 22.sp,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -809,20 +809,28 @@ fun LogViewerDialog(onDismiss: () -> Unit, onCopy: () -> Unit, onClear: () -> Un
             }
         },
         confirmButton = {
-            Row {
-                TextButton(onClick = {
-                    onClear()
-                    refreshTick++
-                }) {
-                    Text("Clear")
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
+                IconButton(
+                    onClick = {
+                        onClear()
+                        refreshTick++
+                    },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Clear logs",
+                        tint = Color.Cyan,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(onClick = onCopy) { Text("Copy") }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(onClick = onDismiss) { Text("Close") }
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        },
+        dismissButton = null,
         containerColor = Color(0xFF1A1A1A),
         textContentColor = Color.White,
         titleContentColor = Color.White

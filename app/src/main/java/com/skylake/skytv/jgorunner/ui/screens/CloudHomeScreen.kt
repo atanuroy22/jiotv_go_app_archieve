@@ -105,7 +105,7 @@ fun CloudHomeScreen(
         val freeJio = CloudServer(
             name = "Free Jio",
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
-            logo = "https://iili.io/f1zkPwP.md.png"
+            logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
         )
         
         // Reorder: Jio first, then Free Jio, then others. Hide Zee5 and Sports by default.
@@ -141,27 +141,41 @@ fun CloudHomeScreen(
         servers = visibleServers
 
         if (visibleServers.isNotEmpty()) {
-            if (autoopenServerUrl == null || visibleServers.none { it.url == autoopenServerUrl }) {
-                autoopenServerUrl = visibleServers.first().url
-                preferenceManager.myPrefs.cloudAutoplayServerUrl = autoopenServerUrl
+            val resolvedAutoopenUrl = when {
+                !isSubscribed -> freeJio.url
+                autoopenServerUrl != null && visibleServers.any { it.url == autoopenServerUrl } -> autoopenServerUrl
+                else -> visibleServers.first().url
+            }
+            if (autoopenServerUrl != resolvedAutoopenUrl) {
+                autoopenServerUrl = resolvedAutoopenUrl
+                preferenceManager.myPrefs.cloudAutoplayServerUrl = resolvedAutoopenUrl
                 preferenceManager.savePreferences()
             }
         }
     }
 
-    LaunchedEffect(autoopenDelaySeconds, servers, autoopenServerUrl) {
+    LaunchedEffect(autoopenDelaySeconds, servers, autoopenServerUrl, autoopenConsumed) {
         if (!autoopenConsumed && autoopenDelaySeconds > 0 && servers.isNotEmpty()) {
             isAutoopenActive = true
             countdown = autoopenDelaySeconds
-            while (countdown > 0 && autoopenDelaySeconds > 0 && isAutoopenActive) {
+            while (countdown > 0 && autoopenDelaySeconds > 0 && isAutoopenActive && !autoopenConsumed) {
                 delay(1000)
                 if (!showSettingsPanel && !showHiddenServersDialog && !showAutoopenServerDialog && !showCouponDialog) {
                     countdown--
                 }
             }
-            if (countdown == 0 && autoopenDelaySeconds > 0 && isAutoopenActive) {
+            if (countdown == 0 && autoopenDelaySeconds > 0 && isAutoopenActive && !autoopenConsumed) {
                 autoopenConsumed = true
-                val target = servers.firstOrNull { it.url == autoopenServerUrl }
+                val subscriptionActiveNow = preferenceManager.myPrefs.cloudSubExpiry > System.currentTimeMillis()
+                val target = if (subscriptionActiveNow) {
+                    servers.firstOrNull { it.url == autoopenServerUrl } ?: servers.firstOrNull()
+                } else {
+                    servers.firstOrNull {
+                        it.name.contains("free jio", ignoreCase = true) ||
+                            it.url.contains("localhost", ignoreCase = true) ||
+                            it.url.contains("127.0.0.1")
+                    } ?: servers.firstOrNull()
+                }
                 if (target != null) onServerSelected(target)
             }
         } else {
@@ -283,7 +297,7 @@ fun CloudHomeScreen(
                 val expiryText = if (isSubscribed) {
                     "Valid until: ${sdf.format(Date(subExpiry))}"
                 } else {
-                    "🎉 Get Jio+ & Sports at Lowest Price!"
+                    "🎉 Jio+ & Sports & Sony at Lowest Price!"
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
@@ -295,7 +309,7 @@ fun CloudHomeScreen(
                     val autoopenName = allServers.firstOrNull { it.url == autoopenServerUrl }?.name ?: servers.firstOrNull()?.name ?: ""
                     val hiddenCount = hiddenServerUrls.size
                     Text(
-                        text = "Autoopen: $autoopenName | Hidden: $hiddenCount",
+                        text = "AutoOpen: $autoopenName | Hidden: $hiddenCount",
                         color = Color.Gray,
                         fontSize = 10.sp
                     )
@@ -502,9 +516,10 @@ fun CloudHomeScreen(
 }
 
     if (showAutoopenServerDialog) {
-        val optionLabels = servers.map { it.name }
-        val urlByLabel = servers.associate { it.name to it.url }
-        val selectedLabel = servers.firstOrNull { it.url == autoopenServerUrl }?.name
+        val optionPairs = servers.mapIndexed { index, server -> "${index + 1}. ${server.name}" to server.url }
+        val optionLabels = optionPairs.map { it.first }
+        val urlByLabel = optionPairs.toMap()
+        val selectedLabel = optionPairs.firstOrNull { it.second == autoopenServerUrl }?.first
 
         MultiSelectFilterDialog(
             title = "Autoopen Server",
@@ -521,7 +536,6 @@ fun CloudHomeScreen(
                     preferenceManager.savePreferences()
                 }
                 showAutoopenServerDialog = false
-                refreshTrigger++
             }
         )
     }
