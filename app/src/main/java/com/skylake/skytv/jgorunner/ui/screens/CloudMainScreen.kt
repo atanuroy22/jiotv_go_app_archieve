@@ -410,6 +410,21 @@ fun CloudMainScreen(
                             }
                         }
                         item {
+                            SettingsActionItemCompact("Reset Settings", Icons.Default.RestartAlt) {
+                                preferenceManager.myPrefs.cloudAutoplayFirstChannel = false
+                                preferenceManager.myPrefs.cloudAutoplayLastChannel = true
+                                preferenceManager.myPrefs.cloudAnimationEnabled = true
+                                preferenceManager.myPrefs.cloudFocusAnimationEnabled = true
+                                preferenceManager.myPrefs.cloudServerFilters = "{}"
+                                preferenceManager.myPrefs.cloudLanguageFilter = ""
+                                preferenceManager.myPrefs.cloudCategoryFilter = null
+                                preferenceManager.myPrefs.cloudUiScale = 1.0f
+                                preferenceManager.myPrefs.filterQX = null
+                                preferenceManager.savePreferences()
+                                Toast.makeText(context, "Settings reset", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        item {
                             SettingsActionItemCompact("Exit", Icons.AutoMirrored.Filled.ExitToApp) { (context as? Activity)?.finishAffinity() }
                         }
                     }
@@ -663,9 +678,9 @@ fun ChannelGridItemCompact(
     var isFocused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isFocused && focusAnimEnabled) 1.1f else 1.0f)
 
-    Box(
+        Box(
         modifier = modifier
-            .width(80.dp)
+            .width(112.dp)
             .scale(scale)
             .onFocusChanged { isFocused = it.isFocused }
             .clip(RoundedCornerShape(8.dp))
@@ -687,7 +702,7 @@ fun ChannelGridItemCompact(
                     model = channel.logo,
                     contentDescription = null,
                     modifier = Modifier
-                        .size(72.dp)
+                        .size(96.dp)
                         .clip(RoundedCornerShape(4.dp))
                         .background(Color.White.copy(alpha = 0.05f)),
                     contentScale = ContentScale.Fit
@@ -707,10 +722,10 @@ fun ChannelGridItemCompact(
             Text(
                 text = channel.name,
                 color = Color.White,
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 maxLines = 2,
                 textAlign = TextAlign.Center,
-                lineHeight = 13.sp,
+                lineHeight = 15.sp,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
             )
