@@ -161,14 +161,14 @@ fun ChannelGridTV(
                     contentDescription = "${channel.name} logo",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(110.dp),
+                        .height(90.dp),
                     contentScale = ContentScale.Fit
                 )
                 Text(
                     text = channel.name,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    fontSize = 12.sp,
+                    fontSize = 10.sp,
                     modifier = Modifier.padding(8.dp)
                 )
             }
@@ -311,12 +311,12 @@ fun ChannelGridMain(
                     contentDescription = channel.channel_name,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(110.dp),
-                    contentScale = ContentScale.Fit
-                )
-                Text(
-                    text = channel.channel_name,
-                    fontSize = 12.sp,
+                    .height(90.dp),
+                contentScale = ContentScale.Fit
+            )
+            Text(
+                text = channel.channel_name,
+                fontSize = 10.sp,
                     modifier = Modifier.padding(8.dp)
                 )
             }

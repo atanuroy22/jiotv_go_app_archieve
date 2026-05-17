@@ -150,13 +150,13 @@ fun CloudMainScreen(
         val zee5Servers = selectSdServerWithFallback(repository.fetchServers(ZEE5_SERVER_LIST_URL))
         val sonyServers = repository.fetchServers(SONY_SERVER_LIST_URL)
         val sportsServers = repository.fetchServers(SPORTS_SERVER_LIST_URL)
-        val fetched = (jioServers + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
         val freeJio = CloudServer(
             name = "Free Jio",
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
             logo = "https://iili.io/f1zkPwP.md.png"
         )
-        val visibleServers = (fetched + freeJio).filter { it.url !in hiddenServerUrls }
+        val fetched = (jioServers + listOf(freeJio) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
+        val visibleServers = fetched.filter { it.url !in hiddenServerUrls }
         servers = visibleServers
         if (currentServer == null || currentServer?.url in hiddenServerUrls) {
             currentServer = servers.firstOrNull()
@@ -687,7 +687,7 @@ fun ChannelGridItemCompact(
                     model = channel.logo,
                     contentDescription = null,
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(72.dp)
                         .clip(RoundedCornerShape(4.dp))
                         .background(Color.White.copy(alpha = 0.05f)),
                     contentScale = ContentScale.Fit

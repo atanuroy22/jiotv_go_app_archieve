@@ -67,12 +67,12 @@ fun CloudHomeScreen(
     var allServers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var countdown by remember { mutableIntStateOf(5) }
-    var isAutoplayActive by remember { mutableStateOf(false) }
-    val autoplayConsumed = remember { mutableStateOf(false) }
+    var isAutoopenActive by remember { mutableStateOf(false) }
+    val autoopenConsumed = remember { mutableStateOf(false) }
     var showCouponDialog by remember { mutableStateOf(false) }
     var showSettingsPanel by remember { mutableStateOf(false) }
     var showHiddenServersDialog by remember { mutableStateOf(false) }
-    var showAutoplayServerDialog by remember { mutableStateOf(false) }
+    var showAutoopenServerDialog by remember { mutableStateOf(false) }
 
     var refreshTrigger by remember { mutableIntStateOf(0) }
 
@@ -88,9 +88,9 @@ fun CloudHomeScreen(
         }
     }
 
-    val autoplayServerUrl = preferenceManager.myPrefs.cloudAutoplayServerUrl
-    var autoplayDelaySeconds by remember { mutableIntStateOf(preferenceManager.myPrefs.cloudAutoplayDelaySeconds) }
-    var showAutoplayDelayMenu by remember { mutableStateOf(false) }
+    val autoopenServerUrl = preferenceManager.myPrefs.cloudAutoplayServerUrl
+    var autoopenDelaySeconds by remember { mutableIntStateOf(preferenceManager.myPrefs.cloudAutoplayDelaySeconds) }
+    var showAutoopenDelayMenu by remember { mutableStateOf(false) }
 
     val focusRequester = remember { FocusRequester() }
     val serverFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
@@ -120,9 +120,9 @@ fun CloudHomeScreen(
         if (hiddenServerUrls.isEmpty() && isSubscribed && baseList.isNotEmpty()) {
             currentHiddenUrls = baseList
                 .filter { server ->
-                    // Keep only JioTV+, Free Jio, and Sony servers visible. Hide everything else.
+                    // Keep only JioTV+, Free Jio, and Sony (IN) visible. Hide everything else.
                     !server.name.contains("jio", ignoreCase = true) &&
-                    !server.name.contains("sony", ignoreCase = true)
+                    !(server.name.contains("sony", ignoreCase = true) && server.name.contains("in", ignoreCase = true))
                 }
                 .map { it.url }
                 .toMutableList()
@@ -138,28 +138,28 @@ fun CloudHomeScreen(
         servers = visibleServers
     }
 
-    LaunchedEffect(autoplayDelaySeconds, servers, autoplayServerUrl) {
-        if (!autoplayConsumed.value && autoplayDelaySeconds > 0 && servers.isNotEmpty()) {
-            isAutoplayActive = true
-            countdown = autoplayDelaySeconds
-            while (countdown > 0 && autoplayDelaySeconds > 0 && isAutoplayActive) {
+    LaunchedEffect(autoopenDelaySeconds, servers, autoopenServerUrl) {
+        if (!autoopenConsumed.value && autoopenDelaySeconds > 0 && servers.isNotEmpty()) {
+            isAutoopenActive = true
+            countdown = autoopenDelaySeconds
+            while (countdown > 0 && autoopenDelaySeconds > 0 && isAutoopenActive) {
                 delay(1000)
-                if (!showSettingsPanel && !showHiddenServersDialog && !showAutoplayServerDialog && !showCouponDialog) {
+                if (!showSettingsPanel && !showHiddenServersDialog && !showAutoopenServerDialog && !showCouponDialog) {
                     countdown--
                 }
             }
-            if (countdown == 0 && autoplayDelaySeconds > 0 && isAutoplayActive) {
-                autoplayConsumed.value = true
-                val target = servers.firstOrNull { it.url == autoplayServerUrl } ?: servers.first()
+            if (countdown == 0 && autoopenDelaySeconds > 0 && isAutoopenActive) {
+                autoopenConsumed.value = true
+                val target = servers.firstOrNull { it.url == autoopenServerUrl } ?: servers.first()
                 onServerSelected(target)
             }
         } else {
-            isAutoplayActive = false
+            isAutoopenActive = false
         }
     }
 
-    LaunchedEffect(hiddenServerUrls, autoplayServerUrl) {
-        if (autoplayServerUrl != null && autoplayServerUrl in hiddenServerUrls) {
+    LaunchedEffect(hiddenServerUrls, autoopenServerUrl) {
+        if (autoopenServerUrl != null && autoopenServerUrl in hiddenServerUrls) {
             preferenceManager.myPrefs.cloudAutoplayServerUrl = null
             preferenceManager.savePreferences()
         }
@@ -173,12 +173,12 @@ fun CloudHomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0A0A0A))
-            .clickable(enabled = isAutoplayActive) {
-                isAutoplayActive = false
+            .clickable(enabled = isAutoopenActive) {
+                isAutoopenActive = false
             }
             .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && isAutoplayActive) {
-                    isAutoplayActive = false
+                if (event.type == KeyEventType.KeyDown && isAutoopenActive) {
+                    isAutoopenActive = false
                 }
                 false
             }
@@ -239,8 +239,8 @@ fun CloudHomeScreen(
                             server = server,
                             modifier = Modifier.focusRequester(itemFocusRequester),
                             onSelected = {
-                                isAutoplayActive = false
-                                autoplayConsumed.value = true
+                                isAutoopenActive = false
+                                autoopenConsumed.value = true
                                 onServerSelected(server)
                             }
                         )
@@ -253,9 +253,9 @@ fun CloudHomeScreen(
                 }
             }
 
-            if (isAutoplayActive && servers.isNotEmpty()) {
+            if (isAutoopenActive && servers.isNotEmpty()) {
                 Text(
-                    text = "Autoplay in $countdown... Any key or touch to cancel",
+                    text = "Autoopen in $countdown... Any key or touch to cancel",
                     color = Color.White.copy(alpha = 0.7f),
                     fontSize = 14.sp,
                     modifier = Modifier.padding(vertical = 10.dp)
@@ -280,10 +280,10 @@ fun CloudHomeScreen(
                         color = if (isSubscribed) Color.Green else Color.Yellow,
                         fontSize = 11.sp
                     )
-                    val autoplayName = allServers.firstOrNull { it.url == autoplayServerUrl }?.name ?: "Auto"
+                    val autoopenName = allServers.firstOrNull { it.url == autoopenServerUrl }?.name ?: "Auto"
                     val hiddenCount = hiddenServerUrls.size
                     Text(
-                        text = "Autoplay: $autoplayName | Hidden: $hiddenCount",
+                        text = "Autoopen: $autoopenName | Hidden: $hiddenCount",
                         color = Color.Gray,
                         fontSize = 10.sp
                     )
@@ -342,8 +342,8 @@ fun CloudHomeScreen(
                 server.name to server.url
             }
         }
-        val autoplayDelayOptions = listOf(0, 3, 5, 10, 15, 20, 30)
-        val autoplayDelayLabels = mapOf(
+        val autoopenDelayOptions = listOf(0, 3, 5, 10, 15, 20, 30)
+        val autoopenDelayLabels = mapOf(
             0 to "Never",
             3 to "3 sec",
             5 to "5 sec",
@@ -362,27 +362,27 @@ fun CloudHomeScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { showAutoplayDelayMenu = true }
+                                .clickable { showAutoopenDelayMenu = true }
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(Icons.Default.Schedule, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text("Autoplay: ${autoplayDelayLabels[autoplayDelaySeconds]}", color = Color.White)
+                            Text("Autoopen: ${autoopenDelayLabels[autoopenDelaySeconds]}", color = Color.White)
                         }
                         DropdownMenu(
-                            expanded = showAutoplayDelayMenu,
-                            onDismissRequest = { showAutoplayDelayMenu = false }
+                            expanded = showAutoopenDelayMenu,
+                            onDismissRequest = { showAutoopenDelayMenu = false }
                         ) {
-                            autoplayDelayOptions.forEach { seconds ->
+                            autoopenDelayOptions.forEach { seconds ->
                                 DropdownMenuItem(
-                                    text = { Text(autoplayDelayLabels[seconds] ?: "Unknown") },
+                                    text = { Text(autoopenDelayLabels[seconds] ?: "Unknown") },
                                     onClick = {
-                                        autoplayConsumed.value = false
-                                        autoplayDelaySeconds = seconds
+                                        autoopenConsumed.value = false
+                                        autoopenDelaySeconds = seconds
                                         preferenceManager.myPrefs.cloudAutoplayDelaySeconds = seconds
                                         preferenceManager.savePreferences()
-                                        showAutoplayDelayMenu = false
+                                        showAutoopenDelayMenu = false
                                     }
                                 )
                             }
@@ -400,17 +400,19 @@ fun CloudHomeScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Text("Hidden Servers (${hiddenServerUrls.size})", color = Color.White)
                     }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showAutoplayServerDialog = true }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.PlayCircle, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
-                        val autoplayName = servers.firstOrNull { it.url == autoplayServerUrl }?.name ?: "Auto"
-                        Text("Autoplay Server: $autoplayName", color = Color.White)
+                    if (autoopenDelaySeconds > 0) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showAutoopenServerDialog = true }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.PlayCircle, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            val autoopenName = servers.firstOrNull { it.url == autoopenServerUrl }?.name ?: "Auto"
+                            Text("Autoopen Server: $autoopenName", color = Color.White)
+                        }
                     }
                     androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 4.dp))
                     Row(
@@ -485,23 +487,23 @@ fun CloudHomeScreen(
     )
 }
 
-    if (showAutoplayServerDialog) {
+    if (showAutoopenServerDialog) {
         val optionLabels = servers.map { it.name }
         val urlByLabel = servers.associate { it.name to it.url }
-        val selectedLabel = servers.firstOrNull { it.url == autoplayServerUrl }?.name
+        val selectedLabel = servers.firstOrNull { it.url == autoopenServerUrl }?.name
 
         MultiSelectFilterDialog(
-            title = "Autoplay Server",
+            title = "Autoopen Server",
             options = optionLabels,
             selectedOptions = if (selectedLabel == null) emptySet() else setOf(selectedLabel),
             singleSelect = true,
-            onDismiss = { showAutoplayServerDialog = false },
+            onDismiss = { showAutoopenServerDialog = false },
             onConfirm = { selected ->
-                autoplayConsumed.value = false
+                autoopenConsumed.value = false
                 val url = selected.firstOrNull()?.let { urlByLabel[it] }
                 preferenceManager.myPrefs.cloudAutoplayServerUrl = url
                 preferenceManager.savePreferences()
-                showAutoplayServerDialog = false
+                showAutoopenServerDialog = false
                 refreshTrigger++
             }
         )
