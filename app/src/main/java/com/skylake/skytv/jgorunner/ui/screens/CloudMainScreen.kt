@@ -337,7 +337,7 @@ fun CloudMainScreen(
                     LazyColumn(modifier = Modifier.weight(1f)) {
                         item {
                             var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayFirstChannel) }
-                            SettingsToggleRefreshed("Autoplay First", checked) {
+                            SettingsToggleRefreshed("Autoplay 1st CH", checked) {
                                 checked = it
                                 preferenceManager.myPrefs.cloudAutoplayFirstChannel = it
                                 preferenceManager.savePreferences()
@@ -345,7 +345,7 @@ fun CloudMainScreen(
                         }
                         item {
                             var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayLastChannel) }
-                            SettingsToggleRefreshed("Autoplay Last", checked) {
+                            SettingsToggleRefreshed("Autoplay Last played CH", checked) {
                                 checked = it
                                 preferenceManager.myPrefs.cloudAutoplayLastChannel = it
                                 preferenceManager.savePreferences()
@@ -407,17 +407,6 @@ fun CloudMainScreen(
                                 checked = it
                                 preferenceManager.myPrefs.cloudFocusAnimationEnabled = it
                                 preferenceManager.savePreferences()
-                            }
-                        }
-                        item {
-                            SettingsActionItemCompact("Reset UI", Icons.Default.RestartAlt) {
-                                preferenceManager.myPrefs.cloudUiScale = 1.0f
-                                preferenceManager.myPrefs.cloudAnimationEnabled = true
-                                preferenceManager.myPrefs.cloudFocusAnimationEnabled = true
-                                preferenceManager.myPrefs.cloudServerFilters = "{}"
-                                preferenceManager.myPrefs.cloudLanguageFilter = ""
-                                preferenceManager.savePreferences()
-                                onNavigate("CloudHome")
                             }
                         }
                         item {

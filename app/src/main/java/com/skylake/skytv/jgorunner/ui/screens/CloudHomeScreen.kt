@@ -144,7 +144,9 @@ fun CloudHomeScreen(
             countdown = autoplayDelaySeconds
             while (countdown > 0 && autoplayDelaySeconds > 0 && isAutoplayActive) {
                 delay(1000)
-                countdown--
+                if (!showSettingsPanel && !showHiddenServersDialog && !showAutoplayServerDialog && !showCouponDialog) {
+                    countdown--
+                }
             }
             if (countdown == 0 && autoplayDelaySeconds > 0 && isAutoplayActive) {
                 autoplayConsumed.value = true
@@ -409,6 +411,36 @@ fun CloudHomeScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         val autoplayName = servers.firstOrNull { it.url == autoplayServerUrl }?.name ?: "Auto"
                         Text("Autoplay Server: $autoplayName", color = Color.White)
+                    }
+                    androidx.compose.material3.HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                preferenceManager.myPrefs.cloudHiddenServerUrls = "[]"
+                                preferenceManager.myPrefs.cloudAutoplayServerUrl = null
+                                preferenceManager.myPrefs.cloudAutoplayDelaySeconds = 0
+                                preferenceManager.myPrefs.cloudAutoplayFirstChannel = false
+                                preferenceManager.myPrefs.cloudAutoplayLastChannel = false
+                                preferenceManager.myPrefs.lastCloudPlayedChannelId = null
+                                preferenceManager.myPrefs.lastCloudServerUrl = null
+                                preferenceManager.myPrefs.lastCloudServerName = null
+                                preferenceManager.myPrefs.cloudUiScale = 1.0f
+                                preferenceManager.myPrefs.cloudAnimationEnabled = true
+                                preferenceManager.myPrefs.cloudFocusAnimationEnabled = true
+                                preferenceManager.myPrefs.cloudServerFilters = "{}"
+                                preferenceManager.myPrefs.cloudLanguageFilter = ""
+                                preferenceManager.myPrefs.cloudCategoryFilter = null
+                                preferenceManager.savePreferences()
+                                showSettingsPanel = false
+                                refreshTrigger++
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.RestartAlt, null, tint = Color.Red, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("Reset All Settings", color = Color.Red)
                     }
                 }
             },
