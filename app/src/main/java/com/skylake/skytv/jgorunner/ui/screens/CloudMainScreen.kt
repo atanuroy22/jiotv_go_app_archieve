@@ -150,12 +150,17 @@ fun CloudMainScreen(
         val zee5Servers = selectSdServerWithFallback(repository.fetchServers(ZEE5_SERVER_LIST_URL))
         val sonyServers = repository.fetchServers(SONY_SERVER_LIST_URL)
         val sportsServers = repository.fetchServers(SPORTS_SERVER_LIST_URL)
+        val isSubscribed = preferenceManager.myPrefs.cloudSubExpiry > System.currentTimeMillis()
         val freeJio = CloudServer(
             name = "Free Jio",
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
             logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
         )
-        val fetched = (jioServers + listOf(freeJio) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
+        val fetched = if (isSubscribed) {
+            (jioServers + listOf(freeJio) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
+        } else {
+            listOf(freeJio)
+        }
         val visibleServers = fetched.filter { it.url !in hiddenServerUrls }
         servers = visibleServers
         if (currentServer == null || currentServer?.url in hiddenServerUrls) {
@@ -164,6 +169,9 @@ fun CloudMainScreen(
     }
 
     LaunchedEffect(hiddenServerUrls, servers) {
+        if (servers.isEmpty()) {
+            return@LaunchedEffect
+        }
         val activeUrl = currentServer?.url
         if (activeUrl == null || activeUrl in hiddenServerUrls || servers.none { it.url == activeUrl }) {
             currentServer = servers.firstOrNull()
@@ -680,7 +688,7 @@ fun ChannelGridItemCompact(
 
     Box(
         modifier = modifier
-            .width(112.dp)
+            .width(130.dp)
             .scale(scale)
             .onFocusChanged { isFocused = it.isFocused }
             .clip(RoundedCornerShape(8.dp))
@@ -702,7 +710,7 @@ fun ChannelGridItemCompact(
                     model = channel.logo,
                     contentDescription = null,
                     modifier = Modifier
-                        .size(96.dp)
+                        .size(110.dp)
                         .clip(RoundedCornerShape(4.dp))
                         .background(Color.White.copy(alpha = 0.05f)),
                     contentScale = ContentScale.Fit
@@ -722,10 +730,10 @@ fun ChannelGridItemCompact(
             Text(
                 text = channel.name,
                 color = Color.White,
-                fontSize = 18.sp,
+                fontSize = 16.sp,
                 maxLines = 2,
                 textAlign = TextAlign.Center,
-                lineHeight = 22.sp,
+                lineHeight = 19.sp,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
             )
