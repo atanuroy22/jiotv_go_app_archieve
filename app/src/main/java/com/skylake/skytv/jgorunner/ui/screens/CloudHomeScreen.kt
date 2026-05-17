@@ -50,10 +50,13 @@ import java.util.Date
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-private const val JIO_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/jiotv+.json"
-private const val ZEE5_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/zee5.json"
-private const val SONY_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sony.json"
-private const val SPORTS_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sports.json"
+private const val CLOUD_SRC_A = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9qaW90disuanNvbg=="
+private const val CLOUD_SRC_B = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC96ZWU1Lmpzb24="
+private const val CLOUD_SRC_C = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zb255Lmpzb24="
+private const val CLOUD_SRC_D = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zcG9ydHMuanNvbg=="
+
+private fun decodeCloudUrl(encoded: String): String =
+    String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
 
 @Composable
 fun CloudHomeScreen(
@@ -97,10 +100,10 @@ fun CloudHomeScreen(
     val serverFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
 
     LaunchedEffect(refreshTrigger) {
-        val jioServers = repository.fetchServers(JIO_SERVER_LIST_URL)
-        val zee5Servers = selectSdServerWithFallback(repository.fetchServers(ZEE5_SERVER_LIST_URL))
-        val sonyServers = repository.fetchServers(SONY_SERVER_LIST_URL)
-        val sportsServers = repository.fetchServers(SPORTS_SERVER_LIST_URL)
+        val jioServers = repository.fetchServers(decodeCloudUrl(CLOUD_SRC_A))
+        val zee5Servers = selectSdServerWithFallback(repository.fetchServers(decodeCloudUrl(CLOUD_SRC_B)))
+        val sonyServers = repository.fetchServers(decodeCloudUrl(CLOUD_SRC_C))
+        val sportsServers = repository.fetchServers(decodeCloudUrl(CLOUD_SRC_D))
         
         val freeJio = CloudServer(
             name = "Free Jio",
