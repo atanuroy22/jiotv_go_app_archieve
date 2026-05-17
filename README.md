@@ -97,7 +97,7 @@ JTV-GO Server keeps the focus on TV streaming with extra optimizations for a bet
 
 --- -->
 
-🙏 Thanks to rabilrbl — original developer & All contributors who helped improve this project.
+🙏 Thanks to rabilrbl — original developer & All contributors who helped improve this project.And also thanks to cloudplay for providing urls.
 <!-- 
 build
 
