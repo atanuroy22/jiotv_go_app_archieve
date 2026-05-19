@@ -465,6 +465,7 @@ fun CloudHomeScreen(
                                 preferenceManager.myPrefs.cloudUiScale = 1.0f
                                 preferenceManager.myPrefs.cloudAnimationEnabled = true
                                 preferenceManager.myPrefs.cloudFocusAnimationEnabled = true
+                                preferenceManager.myPrefs.cloudQualityMaxHeight = 0
                                 preferenceManager.myPrefs.cloudServerFilters = "{}"
                                 preferenceManager.myPrefs.cloudLanguageFilter = ""
                                 preferenceManager.myPrefs.cloudCategoryFilter = null

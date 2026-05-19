@@ -57,6 +57,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.drm.DefaultDrmSessionManagerProvider
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -165,8 +166,13 @@ fun CloudPlayerScreen(
             .build()
     }
 
+    val trackSelector = remember { DefaultTrackSelector(context) }
+
     val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
+        ExoPlayer.Builder(context)
+            .setTrackSelector(trackSelector)
+            .build()
+            .apply {
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
                         LogCollector.logError("CloudPlayer Error: ${error.errorCodeName} - ${error.message}", error)
@@ -240,7 +246,15 @@ fun CloudPlayerScreen(
             }
     }
 
-    LaunchedEffect(currentIndex, isFallbackAttempt, preferenceManager.myPrefs.filterQX) {
+    LaunchedEffect(preferenceManager.myPrefs.cloudQualityMaxHeight) {
+        val maxHeight = preferenceManager.myPrefs.cloudQualityMaxHeight
+        val resolvedHeight = if (maxHeight <= 0) Int.MAX_VALUE else maxHeight
+        trackSelector.setParameters(
+            trackSelector.buildUponParameters().setMaxVideoSize(Int.MAX_VALUE, resolvedHeight)
+        )
+    }
+
+    LaunchedEffect(currentIndex, isFallbackAttempt, preferenceManager.myPrefs.cloudQualityMaxHeight) {
         val ch = activeList.getOrNull(currentIndex)
         if (ch == null) return@LaunchedEffect
 
@@ -278,11 +292,15 @@ fun CloudPlayerScreen(
         playerError = null
         retryCountRef.value = 0
 
-        val qPref = preferenceManager.myPrefs.filterQX
         val playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
 
         if (playbackUrl.isNotBlank()) {
-            val normalized = normalizePlaybackUrl(context, playbackUrl, keepPlayEndpoint = true)
+            val normalized = normalizePlaybackUrl(
+                context,
+                playbackUrl,
+                keepPlayEndpoint = true,
+                applyQuality = false
+            )
             LogCollector.log("Preparing Cloud Player: ${ch.name} -> $normalized")
 
             val builder = MediaItem.Builder()
@@ -750,15 +768,20 @@ fun CloudSettingsPanel(
     )
 
     val qualityOptions = listOf(
-        "Auto" to null,
-        "Low" to "low",
-        "Medium" to "medium",
-        "High (1080p)" to "high"
+        "Auto" to 0,
+        "144p" to 144,
+        "240p" to 240,
+        "360p" to 360,
+        "480p" to 480,
+        "720p" to 720,
+        "1080p" to 1080,
+        "1440p" to 1440,
+        "2160p (4K)" to 2160
     )
     val qualityLabels = qualityOptions.map { it.first }
-    val normalizedQuality = preferenceManager.myPrefs.filterQX?.trim()?.lowercase()
+    val currentMaxHeight = preferenceManager.myPrefs.cloudQualityMaxHeight
     val initialQualityLabel =
-        qualityOptions.firstOrNull { it.second == normalizedQuality }?.first ?: "Auto"
+        qualityOptions.firstOrNull { it.second == currentMaxHeight }?.first ?: "Auto"
 
     Box(modifier = Modifier.fillMaxHeight().width(280.dp).background(Color.Black.copy(alpha = 0.85f)).padding(16.dp)) {
         Column {
@@ -788,7 +811,7 @@ fun CloudSettingsPanel(
                         val nextIndex = (currentIndex + 1) % qualityLabels.size
                         val nextLabel = qualityLabels[nextIndex]
                         currentQ = nextLabel
-                        preferenceManager.myPrefs.filterQX = qualityOptions[nextIndex].second
+                        preferenceManager.myPrefs.cloudQualityMaxHeight = qualityOptions[nextIndex].second
                         preferenceManager.savePreferences()
                         onClose() // Reload player by closing and letting it re-prepare if needed, or simple close is fine.
                     }

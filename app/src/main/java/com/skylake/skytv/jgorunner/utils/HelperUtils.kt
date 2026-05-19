@@ -107,7 +107,12 @@ fun withQuality(context: Context, chURL: String, logIT: Boolean = false): String
     return videoUrl
 }
 
-fun normalizePlaybackUrl(context: Context, inputUrl: String, keepPlayEndpoint: Boolean = false): String {
+fun normalizePlaybackUrl(
+    context: Context,
+    inputUrl: String,
+    keepPlayEndpoint: Boolean = false,
+    applyQuality: Boolean = true
+): String {
     val skyPref = SkySharedPref.getInstance(context).myPrefs
     var url = inputUrl.trim().trim('`', '"', '\'')
 
@@ -129,10 +134,14 @@ fun normalizePlaybackUrl(context: Context, inputUrl: String, keepPlayEndpoint: B
     }
 
     val parsed = runCatching { Uri.parse(url) }.getOrNull()
-    val qFromPref = skyPref.filterQX?.trim()?.lowercase()
-    val effectiveQuality = when (qFromPref) {
-        "low", "medium", "high" -> qFromPref
-        else -> null
+    val effectiveQuality = if (applyQuality) {
+        val qFromPref = skyPref.filterQX?.trim()?.lowercase()
+        when (qFromPref) {
+            "low", "medium", "high" -> qFromPref
+            else -> null
+        }
+    } else {
+        null
     }
 
     if (parsed != null && parsed.query?.isNotEmpty() == true) {

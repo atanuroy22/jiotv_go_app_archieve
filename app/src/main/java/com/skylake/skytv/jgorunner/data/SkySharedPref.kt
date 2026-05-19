@@ -223,6 +223,7 @@ class SkySharedPref(context: Context) {
         @SharedPrefKey("cloud_ui_scale") var cloudUiScale: Float = 1.0f,
         @SharedPrefKey("cloud_animation_enabled") var cloudAnimationEnabled: Boolean = true,
         @SharedPrefKey("cloud_focus_anim_enabled") var cloudFocusAnimationEnabled: Boolean = true,
+        @SharedPrefKey("cloud_quality_max_height") var cloudQualityMaxHeight: Int = 0,
 
         // Widget-specific preferences
         @SharedPrefKey("widget_show_logs") var widgetShowLogs: Boolean = false,
