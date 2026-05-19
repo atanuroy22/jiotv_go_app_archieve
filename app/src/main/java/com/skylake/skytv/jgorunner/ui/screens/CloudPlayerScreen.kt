@@ -263,6 +263,18 @@ fun CloudPlayerScreen(
             normalizedHeaders["User-Agent"] = ch.userAgent
         }
 
+        val alexJplusHost = ch.licenseUrl?.contains("alex4528.site", true) == true ||
+            (ch.mpdUrl?.contains("alex4528.site", true) == true) ||
+            (ch.m3u8Url?.contains("alex4528.site", true) == true)
+        if (alexJplusHost) {
+            if (!normalizedHeaders.containsKey("Origin")) {
+                normalizedHeaders["Origin"] = "https://alex4528.site"
+            }
+            if (!normalizedHeaders.containsKey("Referer")) {
+                normalizedHeaders["Referer"] = "https://alex4528.site/"
+            }
+        }
+
         playerError = null
         retryCountRef.value = 0
 
@@ -303,6 +315,7 @@ fun CloudPlayerScreen(
                 val isClearKey = ch.licenseUrl.contains("plkey.php", true) ||
                                 ch.licenseUrl.contains("key.php", true) ||
                                 ch.licenseUrl.contains("clearkey", true) ||
+                                ch.licenseUrl.contains("alex4528.site/jplus/license", true) ||
                                 (ch.licenseUrl.contains("results.php", true) &&
                                     ch.licenseUrl.contains("keyid=", true) &&
                                     ch.licenseUrl.contains("key=", true)) ||
