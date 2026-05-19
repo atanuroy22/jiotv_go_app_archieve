@@ -68,6 +68,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.skylake.skytv.jgorunner.activities.MainActivity
 import com.skylake.skytv.jgorunner.data.SkySharedPref
+import com.skylake.skytv.jgorunner.ui.components.MultiSelectFilterDialog
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.utils.LogCollector
 import com.skylake.skytv.jgorunner.utils.normalizePlaybackUrl
@@ -293,12 +294,15 @@ fun CloudPlayerScreen(
         retryCountRef.value = 0
 
         val playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
+        val isLocalPlayback = playbackUrl.contains("localhost", true) || playbackUrl.contains("127.0.0.1")
+        val preferredPlaybackUrl =
+            if (isLocalPlayback && !ch.m3u8Url.isNullOrBlank()) ch.m3u8Url ?: playbackUrl else playbackUrl
 
         if (playbackUrl.isNotBlank()) {
             val normalized = normalizePlaybackUrl(
                 context,
-                playbackUrl,
-                keepPlayEndpoint = true,
+                preferredPlaybackUrl,
+                keepPlayEndpoint = !isLocalPlayback,
                 applyQuality = false
             )
             LogCollector.log("Preparing Cloud Player: ${ch.name} -> $normalized")
@@ -308,11 +312,15 @@ fun CloudPlayerScreen(
                 .setMediaId(ch.id ?: "")
 
             // Resilient MimeType detection
-            val isDash = !isFallbackAttempt && (
-                normalized.contains(".mpd") ||
-                normalized.contains("/play/") ||
-                (ch.type == "dash" && !normalized.contains(".m3u8"))
-            )
+            val isDash = !isFallbackAttempt &&
+                !normalized.contains(".m3u8") &&
+                !normalized.contains(".m3u") &&
+                !normalized.contains("/live/") &&
+                (
+                    normalized.contains(".mpd") ||
+                        normalized.contains("/play/") ||
+                        (ch.type == "dash" && !normalized.contains(".m3u8"))
+                )
             lastAttemptWasDash = isDash
 
             if (isDash) {
@@ -783,6 +791,9 @@ fun CloudSettingsPanel(
     val initialQualityLabel =
         qualityOptions.firstOrNull { it.second == currentMaxHeight }?.first ?: "Auto"
 
+    var showQualityDialog by remember { mutableStateOf(false) }
+    var currentQ by remember { mutableStateOf(initialQualityLabel) }
+
     Box(modifier = Modifier.fillMaxHeight().width(280.dp).background(Color.Black.copy(alpha = 0.85f)).padding(16.dp)) {
         Column {
             Text("Player Settings", color = Color.Cyan, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(bottom = 16.dp))
@@ -805,15 +816,8 @@ fun CloudSettingsPanel(
                     }
                 }
                 item {
-                    var currentQ by remember { mutableStateOf(initialQualityLabel) }
                     SettingsActionItemCompact("Quality: $currentQ", Icons.Default.HighQuality) {
-                        val currentIndex = qualityLabels.indexOf(currentQ).let { if (it < 0) 0 else it }
-                        val nextIndex = (currentIndex + 1) % qualityLabels.size
-                        val nextLabel = qualityLabels[nextIndex]
-                        currentQ = nextLabel
-                        preferenceManager.myPrefs.cloudQualityMaxHeight = qualityOptions[nextIndex].second
-                        preferenceManager.savePreferences()
-                        onClose() // Reload player by closing and letting it re-prepare if needed, or simple close is fine.
+                        showQualityDialog = true
                     }
                 }
                 item {
@@ -821,6 +825,26 @@ fun CloudSettingsPanel(
                 }
             }
         }
+    }
+
+    if (showQualityDialog) {
+        val selected = setOf(currentQ)
+        MultiSelectFilterDialog(
+            title = "Quality",
+            options = qualityLabels,
+            selectedOptions = selected,
+            singleSelect = true,
+            onDismiss = { showQualityDialog = false },
+            onConfirm = { selectedLabels ->
+                val label = selectedLabels.firstOrNull() ?: "Auto"
+                val index = qualityLabels.indexOf(label).let { if (it < 0) 0 else it }
+                currentQ = label
+                preferenceManager.myPrefs.cloudQualityMaxHeight = qualityOptions[index].second
+                preferenceManager.savePreferences()
+                showQualityDialog = false
+                onClose()
+            }
+        )
     }
 }
 
