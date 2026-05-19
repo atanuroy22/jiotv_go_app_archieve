@@ -225,6 +225,8 @@ object CloudParsers {
             val userAgent = obj.firstStringOf("user_agent", "userAgent", "ua", "user-agent", "User-Agent")
 
             val mpdRaw = obj.firstStringOf("mpd_url", "mpd", "dash", "dash_url", "mpdUrl")
+            val adFreeRaw = obj.firstStringOf("adfree_url", "adfreeUrl", "adfree")
+            val daiRaw = obj.firstStringOf("dai_url", "daiUrl", "dai")
             val m3uRaw = obj.firstStringOf(
                 "m3u8_url",
                 "m3u8",
@@ -299,6 +301,15 @@ object CloudParsers {
                 else -> null
             }
 
+            val primaryHls = adFreeRaw?.trim().orEmpty().ifBlank { daiRaw?.trim().orEmpty() }
+            val fallbackHls = if (!adFreeRaw.isNullOrBlank() && !daiRaw.isNullOrBlank()) {
+                daiRaw?.trim()
+            } else {
+                null
+            }
+            val finalPrimaryHls = primaryHls.ifBlank { resolvedM3u8?.trim().orEmpty() }.ifBlank { null }
+            val finalFallbackHls = fallbackHls?.takeIf { it.isNotBlank() && it != finalPrimaryHls }
+
             val finalId = id?.trim().orEmpty().ifBlank {
                 resolvedM3u8?.substringAfterLast("/")?.substringBefore("?")?.substringBefore(".")
                     ?: resolvedMpd?.substringAfterLast("/")?.substringBefore("?")?.substringBefore(".")
@@ -308,7 +319,7 @@ object CloudParsers {
                 finalId.ifBlank { "Unknown" }
             }
 
-            if (finalName.isBlank() || (resolvedMpd.isNullOrBlank() && resolvedM3u8.isNullOrBlank())) {
+            if (finalName.isBlank() || (resolvedMpd.isNullOrBlank() && finalPrimaryHls.isNullOrBlank())) {
                 return@mapNotNull null
             }
 
@@ -320,8 +331,8 @@ object CloudParsers {
                 language = language?.trim(),
                 logo = logo?.trim(),
                 userAgent = userAgent?.trim(),
-                mpdUrl = resolvedMpd?.trim(),
-                m3u8Url = resolvedM3u8?.trim(),
+                mpdUrl = resolvedMpd?.trim() ?: finalPrimaryHls,
+                m3u8Url = finalFallbackHls ?: resolvedM3u8?.trim(),
                 licenseUrl = licenseUrl?.trim(),
                 headers = headers,
                 expiresIn = expiresIn?.trim()

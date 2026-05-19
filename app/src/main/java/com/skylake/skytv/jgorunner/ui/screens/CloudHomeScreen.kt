@@ -54,6 +54,7 @@ private const val CLOUD_SRC_A = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV
 private const val CLOUD_SRC_B = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC96ZWU1Lmpzb24="
 private const val CLOUD_SRC_C = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zb255Lmpzb24="
 private const val CLOUD_SRC_D = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zcG9ydHMuanNvbg=="
+private const val CLOUD_SRC_E = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2RybWxpdmUvZmFuY29kZS1saXZlLWV2ZW50cy9tYWluL2ZhbmNvZGUuanNvbg=="
 
 private fun decodeCloudUrl(encoded: String): String =
     String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
@@ -111,9 +112,15 @@ fun CloudHomeScreen(
             logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
         )
         
+        val fancodeServer = CloudServer(
+            name = "Fancode Live",
+            url = decodeCloudUrl(CLOUD_SRC_E),
+            logo = "https://upload.wikimedia.org/wikipedia/en/6/6c/FanCode_logo.svg"
+        )
+
         // Reorder: Jio first, then Free Jio, then others. Hide Zee5 and Sports by default.
         val baseList = if (isSubscribed) {
-            (jioServers + listOf(freeJio) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
+            (jioServers + listOf(freeJio, fancodeServer) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
         } else {
             listOf(freeJio)
         }
@@ -128,7 +135,8 @@ fun CloudHomeScreen(
                     val isJio = server.name.contains("jio", ignoreCase = true) && !server.name.contains("sony", ignoreCase = true)
                     val isSonyIn = server.name.contains("sony", ignoreCase = true) && server.name.contains("in", ignoreCase = true)
                     val isSlow = server.name.contains("slow", ignoreCase = true)
-                    !(isJio || isSonyIn) || isSlow
+                    val isFancode = server.name.contains("fancode", ignoreCase = true)
+                    !(isJio || isSonyIn || isFancode) || isSlow
                 }
                 .map { it.url }
                 .toMutableList()

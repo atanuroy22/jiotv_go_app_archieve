@@ -64,6 +64,7 @@ private const val JIO_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/ca
 private const val ZEE5_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/zee5.json"
 private const val SONY_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sony.json"
 private const val SPORTS_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sports.json"
+private const val FANCODE_SERVER_URL = "https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json"
 
 @Composable
 fun CloudMainScreen(
@@ -156,8 +157,13 @@ fun CloudMainScreen(
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
             logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
         )
+        val fancodeServer = CloudServer(
+            name = "Fancode Live",
+            url = FANCODE_SERVER_URL,
+            logo = "https://upload.wikimedia.org/wikipedia/en/6/6c/FanCode_logo.svg"
+        )
         val fetched = if (isSubscribed) {
-            (jioServers + listOf(freeJio) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
+            (jioServers + listOf(freeJio, fancodeServer) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
         } else {
             listOf(freeJio)
         }
