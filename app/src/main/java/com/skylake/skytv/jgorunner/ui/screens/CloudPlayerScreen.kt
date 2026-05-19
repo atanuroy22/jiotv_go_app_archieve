@@ -303,6 +303,9 @@ fun CloudPlayerScreen(
                 val isClearKey = ch.licenseUrl.contains("plkey.php", true) ||
                                 ch.licenseUrl.contains("key.php", true) ||
                                 ch.licenseUrl.contains("clearkey", true) ||
+                                (ch.licenseUrl.contains("results.php", true) &&
+                                    ch.licenseUrl.contains("keyid=", true) &&
+                                    ch.licenseUrl.contains("key=", true)) ||
                                 ch.type?.contains("clearkey", true) == true
 
                 val drmUuid = if (isClearKey) C.CLEARKEY_UUID else C.WIDEVINE_UUID
@@ -310,6 +313,7 @@ fun CloudPlayerScreen(
                 builder.setDrmConfiguration(
                     MediaItem.DrmConfiguration.Builder(drmUuid)
                         .setLicenseUri(ch.licenseUrl)
+                        .setLicenseRequestHeaders(normalizedHeaders)
                         .setMultiSession(true)
                         .build()
                 )
@@ -696,16 +700,16 @@ fun CloudSidePanel(
                             .border(if (isFocused) 2.dp else 0.dp, Color.Cyan, RoundedCornerShape(8.dp))
                             .focusable()
                             .clickable { onChannelSelected(index) }
-                            .padding(10.dp),
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AsyncImage(model = channel.logo, contentDescription = null, modifier = Modifier.size(46.dp).clip(RoundedCornerShape(4.dp)))
+                        AsyncImage(model = channel.logo, contentDescription = null, modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)))
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = channel.name,
                             color = if (isFocused || isSelected) Color.Cyan else Color.White,
                             maxLines = 1,
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                             fontWeight = if (isFocused || isSelected) FontWeight.Bold else FontWeight.Normal
                         )
                     }
