@@ -160,7 +160,7 @@ fun CloudMainScreen(
         val fancodeServer = CloudServer(
             name = "Fancode Live",
             url = FANCODE_SERVER_URL,
-            logo = "https://upload.wikimedia.org/wikipedia/en/6/6c/FanCode_logo.svg"
+            logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2021/06/26/60d9761924e40.png"
         )
         val fetched = if (isSubscribed) {
             (jioServers + listOf(freeJio, fancodeServer) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }

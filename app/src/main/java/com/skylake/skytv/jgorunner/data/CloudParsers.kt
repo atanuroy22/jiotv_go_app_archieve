@@ -220,7 +220,17 @@ object CloudParsers {
             val id = obj.firstStringOf("id", "channel_id", "channelId", "cid")
             val group = obj.firstStringOf("group", "category", "group_title", "groupTitle")
             val language = obj.firstStringOf("language", "lang", "tvg_language", "tvg-language")
-            val logo = obj.firstStringOf("logo", "icon", "image", "poster", "thumb", "thumbnail", "tvg_logo", "tvg-logo")
+            val logo = obj.firstStringOf(
+                "logo",
+                "icon",
+                "image",
+                "poster",
+                "thumb",
+                "thumbnail",
+                "tvg_logo",
+                "tvg-logo",
+                "src"
+            )
             val type = obj.firstStringOf("type", "stream_type", "streamType", "format")
             val userAgent = obj.firstStringOf("user_agent", "userAgent", "ua", "user-agent", "User-Agent")
 

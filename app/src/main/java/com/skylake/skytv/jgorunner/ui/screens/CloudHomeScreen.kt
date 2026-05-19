@@ -115,7 +115,7 @@ fun CloudHomeScreen(
         val fancodeServer = CloudServer(
             name = "Fancode Live",
             url = decodeCloudUrl(CLOUD_SRC_E),
-            logo = "https://upload.wikimedia.org/wikipedia/en/6/6c/FanCode_logo.svg"
+            logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2021/06/26/60d9761924e40.png"
         )
 
         // Reorder: Jio first, then Free Jio, then others. Hide Zee5 and Sports by default.
