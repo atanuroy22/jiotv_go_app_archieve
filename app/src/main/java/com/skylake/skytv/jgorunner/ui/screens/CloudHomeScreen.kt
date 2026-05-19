@@ -136,7 +136,9 @@ fun CloudHomeScreen(
                     val isSonyIn = server.name.contains("sony", ignoreCase = true) && server.name.contains("in", ignoreCase = true)
                     val isSlow = server.name.contains("slow", ignoreCase = true)
                     val isFancode = server.name.contains("fancode", ignoreCase = true)
-                    !(isJio || isSonyIn || isFancode) || (isSlow && !isJio)
+                    val isZeeSd = server.name.contains("zee", ignoreCase = true) &&
+                        server.name.contains("sd", ignoreCase = true)
+                    !(isJio || isSonyIn || isFancode || isZeeSd) || (isSlow && !isJio)
                 }
                 .map { it.url }
                 .toMutableList()
