@@ -238,7 +238,7 @@ fun CloudHomeScreen(
             }
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
@@ -247,7 +247,7 @@ fun CloudHomeScreen(
             ) {
                 Text(
                     text = "Cloud Play",
-                    fontSize = 32.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.Cyan,
                     modifier = Modifier.weight(1f)
@@ -258,9 +258,9 @@ fun CloudHomeScreen(
             }
             Text(
                 text = "Select a server to start streaming",
-                fontSize = 14.sp,
+                fontSize = 12.sp,
                 color = Color.Gray,
-                modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
+                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
             )
 
             if (servers.isEmpty()) {
@@ -281,10 +281,10 @@ fun CloudHomeScreen(
             } else {
                 // Changed to Vertical Grid to fit mobile and TV without horizontal hiding
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 150.dp),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    columns = GridCells.Adaptive(minSize = 130.dp),
+                    contentPadding = PaddingValues(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.weight(1f).focusRequester(focusRequester)
                 ) {
                     items(servers) { server ->
@@ -592,17 +592,17 @@ fun ServerCard(
             .border(2.dp, glowColor, RoundedCornerShape(12.dp))
             .clickable { onSelected() }
             .focusable()
-            .padding(16.dp)
+            .padding(8.dp)
     ) {
         AsyncImage(
             model = server.logo,
             contentDescription = null,
             modifier = Modifier
-                .size(88.dp)
-                .clip(RoundedCornerShape(8.dp)),
+                .size(64.dp)
+                .clip(RoundedCornerShape(6.dp)),
             contentScale = ContentScale.Fit
         )
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = server.name,
             color = Color.White,

@@ -297,34 +297,36 @@ fun CloudPlayerScreen(
         }
 
         // >>> JIO HEADERS FIX <<<
-        if (playbackUrl.contains("jio.com", true)) {
+        if (playbackUrl.contains("jio.com", true) || playbackUrl.contains("jio.dev", true)) {
             val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
-            if (!normalizedHeaders.containsKey("User-Agent")) {
-                normalizedHeaders["User-Agent"] = jioUA
-            }
-            if (!normalizedHeaders.containsKey("Origin")) {
-                normalizedHeaders["Origin"] = "https://www.jio.com"
-            }
-            if (!normalizedHeaders.containsKey("Referer")) {
-                normalizedHeaders["Referer"] = "https://www.jio.com/"
-            }
+            normalizedHeaders["User-Agent"] = jioUA
+            normalizedHeaders["Origin"] = "https://www.jio.com"
+            normalizedHeaders["Referer"] = "https://www.jio.com/"
+            normalizedHeaders["x-forwarded-for"] = "49.36.0.1" // Indian IP hint
         }
 
         // >>> EXTRACTOR FOR TATA BING <<<
         if (playbackUrl.contains("tplay/play.php", true)) {
-            val playBody = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+            val playBody = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     val request = okhttp3.Request.Builder()
                         .url(playbackUrl)
                         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36")
+                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
                         .build()
-                    okHttpClient.newCall(request).execute().body?.string()
-                } catch (e: Exception) { null }
+                    val response = okHttpClient.newCall(request).execute()
+                    val body = response.body?.string()
+                    response.close()
+                    body
+                } catch (e: Exception) {
+                    LogCollector.log("Extraction Request Failed: ${e.message}")
+                    null
+                }
             }
             if (playBody != null) {
                 // Support multiple formats: mpd: "...", source: "...", url: "..."
-                val mpdMatch = Regex("""(?:mpd|source|url):\s*["']([^"']+)["']""").find(playBody)
-                val drmMatch = Regex("""(?:drm|key):\s*\{\s*["']([^"']+)["']:\s*["']([^"']+)["']""").find(playBody)
+                val mpdMatch = Regex("""(?:mpd|source|url|link|file):\s*["']([^"']+)["']""").find(playBody)
+                val drmMatch = Regex("""(?:drm|key|license):\s*\{\s*["']?([^"'\s:]+)["']?:\s*["']([^"']+)["']""").find(playBody)
                 
                 if (mpdMatch != null) {
                     var parsedMpdUrl = mpdMatch.groupValues[1]
@@ -339,6 +341,7 @@ fun CloudPlayerScreen(
                         } catch(e:Exception){}
                     }
                     playbackUrl = parsedMpdUrl
+                    LogCollector.log("Extracted Tata URL: $playbackUrl")
                     
                     if (drmMatch != null) {
                         val kidHex = drmMatch.groupValues[1]
@@ -360,6 +363,8 @@ fun CloudPlayerScreen(
                             resolvedLicenseUrl = "data:application/json;base64," + android.util.Base64.encodeToString(clearKeyJson.toByteArray(), android.util.Base64.NO_WRAP)
                         } catch(e: Exception) {}
                     }
+                } else {
+                    LogCollector.log("Extraction Failed: No MPD URL found in response body")
                 }
             }
         }
