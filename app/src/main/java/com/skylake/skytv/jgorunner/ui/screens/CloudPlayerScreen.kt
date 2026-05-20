@@ -278,6 +278,12 @@ fun CloudPlayerScreen(
             normalizedHeaders["User-Agent"] = ch.userAgent
         }
 
+        playerError = null
+        retryCountRef.value = 0
+
+        var resolvedLicenseUrl = ch.licenseUrl
+        var playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
+
         val alexJplusHost = resolvedLicenseUrl?.contains("alex4528.site", true) == true ||
             (ch.mpdUrl?.contains("alex4528.site", true) == true) ||
             (ch.m3u8Url?.contains("alex4528.site", true) == true)
@@ -289,12 +295,6 @@ fun CloudPlayerScreen(
                 normalizedHeaders["Referer"] = "https://alex4528.site/"
             }
         }
-
-        playerError = null
-        retryCountRef.value = 0
-
-        var resolvedLicenseUrl = ch.licenseUrl
-        var playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
 
         // >>> EXTRACTOR FOR TATA BING <<<
         if (playbackUrl.contains("tplay/play.php", true)) {
