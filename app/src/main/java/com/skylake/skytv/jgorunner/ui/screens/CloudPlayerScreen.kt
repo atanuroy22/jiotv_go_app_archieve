@@ -296,22 +296,43 @@ fun CloudPlayerScreen(
             }
         }
 
+        // >>> JIO HEADERS FIX <<<
+        if (playbackUrl.contains("jio.com", true)) {
+            val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
+            if (!normalizedHeaders.containsKey("User-Agent")) {
+                normalizedHeaders["User-Agent"] = jioUA
+            }
+            if (!normalizedHeaders.containsKey("Origin")) {
+                normalizedHeaders["Origin"] = "https://www.jio.com"
+            }
+            if (!normalizedHeaders.containsKey("Referer")) {
+                normalizedHeaders["Referer"] = "https://www.jio.com/"
+            }
+        }
+
         // >>> EXTRACTOR FOR TATA BING <<<
         if (playbackUrl.contains("tplay/play.php", true)) {
             val playBody = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
                 try {
-                    okhttp3.OkHttpClient().newCall(okhttp3.Request.Builder().url(playbackUrl).build()).execute().body?.string()
+                    val request = okhttp3.Request.Builder()
+                        .url(playbackUrl)
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36")
+                        .build()
+                    okHttpClient.newCall(request).execute().body?.string()
                 } catch (e: Exception) { null }
             }
             if (playBody != null) {
-                val mpdMatch = Regex("""mpd:\s*"([^"]+)"""").find(playBody)
-                val drmMatch = Regex("""drm:\s*\{\s*"([^"]+)":\s*"([^"]+)"""").find(playBody)
+                // Support multiple formats: mpd: "...", source: "...", url: "..."
+                val mpdMatch = Regex("""(?:mpd|source|url):\s*["']([^"']+)["']""").find(playBody)
+                val drmMatch = Regex("""(?:drm|key):\s*\{\s*["']([^"']+)["']:\s*["']([^"']+)["']""").find(playBody)
+                
                 if (mpdMatch != null) {
                     var parsedMpdUrl = mpdMatch.groupValues[1]
-                    val tokenMatch = Regex("""token:\s*"([^"]+)"""").find(playBody)
+                    // Support both ?token=... and token: "..."
+                    val tokenMatch = Regex("""token:\s*["']([^"']+)["']""").find(playBody)
                     if (tokenMatch != null) {
                         try {
-                            val tokenPart = tokenMatch.groupValues[1].substringAfter("?", "")
+                            val tokenPart = tokenMatch.groupValues[1].substringAfter("?", tokenMatch.groupValues[1])
                             if (tokenPart.isNotEmpty()) {
                                 parsedMpdUrl = if (parsedMpdUrl.contains("?")) "$parsedMpdUrl&$tokenPart" else "$parsedMpdUrl?$tokenPart"
                             }
@@ -367,6 +388,8 @@ fun CloudPlayerScreen(
                 (
                     normalized.contains(".mpd") ||
                         normalized.contains("/play/") ||
+                        normalized.contains("play.php") ||
+                        normalized.contains("jio.com") ||
                         (ch.type == "dash" && !normalized.contains(".m3u8"))
                 )
             lastAttemptWasDash = isDash
@@ -394,6 +417,7 @@ fun CloudPlayerScreen(
                                     resolvedLicenseUrl!!.contains("keyid=", true) &&
                                     resolvedLicenseUrl!!.contains("key=", true)) ||
                                 resolvedLicenseUrl!!.contains("data:application/json", true) ||
+                                resolvedLicenseUrl!!.startsWith("data:", true) ||
                                 ch.type?.contains("clearkey", true) == true
 
                 val drmUuid = if (isClearKey) C.CLEARKEY_UUID else C.WIDEVINE_UUID

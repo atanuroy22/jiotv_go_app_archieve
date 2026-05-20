@@ -116,7 +116,7 @@ fun CloudHomeScreen(
         val tataBingServer = CloudServer(
             name = "Tata Bing",
             url = decodeCloudUrl(CLOUD_SRC_F),
-            logo = "https://www.tataplaybinge.com/assets/Binge_Logo.f02ba441.svg"
+            logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2022/01/95/61f1ed6874463.png"
         )
         
         val fancodeServer = CloudServer(
@@ -128,7 +128,7 @@ fun CloudHomeScreen(
         val jioCrystalServer = CloudServer(
             name = "Jio Crystal",
             url = decodeCloudUrl(CLOUD_SRC_G),
-            logo = "https://i.ibb.co/N2yz4PkY/1738743366692.png"
+            logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
         )
 
         // Reorder: Jio first, then Free Jio, then others. Hide Zee5 and Sports by default.
