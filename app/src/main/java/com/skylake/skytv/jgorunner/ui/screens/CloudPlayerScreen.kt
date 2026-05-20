@@ -278,7 +278,7 @@ fun CloudPlayerScreen(
             normalizedHeaders["User-Agent"] = ch.userAgent
         }
 
-        val alexJplusHost = ch.licenseUrl?.contains("alex4528.site", true) == true ||
+        val alexJplusHost = resolvedLicenseUrl?.contains("alex4528.site", true) == true ||
             (ch.mpdUrl?.contains("alex4528.site", true) == true) ||
             (ch.m3u8Url?.contains("alex4528.site", true) == true)
         if (alexJplusHost) {
@@ -293,7 +293,55 @@ fun CloudPlayerScreen(
         playerError = null
         retryCountRef.value = 0
 
-        val playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
+        var resolvedLicenseUrl = ch.licenseUrl
+        var playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
+
+        // >>> EXTRACTOR FOR TATA BING <<<
+        if (playbackUrl.contains("tplay/play.php", true)) {
+            val playBody = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    okhttp3.OkHttpClient().newCall(okhttp3.Request.Builder().url(playbackUrl).build()).execute().body?.string()
+                } catch (e: Exception) { null }
+            }
+            if (playBody != null) {
+                val mpdMatch = Regex("""mpd:\s*"([^"]+)"""").find(playBody)
+                val drmMatch = Regex("""drm:\s*\{\s*"([^"]+)":\s*"([^"]+)"""").find(playBody)
+                if (mpdMatch != null) {
+                    var parsedMpdUrl = mpdMatch.groupValues[1]
+                    val tokenMatch = Regex("""token:\s*"([^"]+)"""").find(playBody)
+                    if (tokenMatch != null) {
+                        try {
+                            val tokenPart = tokenMatch.groupValues[1].substringAfter("?", "")
+                            if (tokenPart.isNotEmpty()) {
+                                parsedMpdUrl = if (parsedMpdUrl.contains("?")) "$parsedMpdUrl&$tokenPart" else "$parsedMpdUrl?$tokenPart"
+                            }
+                        } catch(e:Exception){}
+                    }
+                    playbackUrl = parsedMpdUrl
+                    
+                    if (drmMatch != null) {
+                        val kidHex = drmMatch.groupValues[1]
+                        val kHex = drmMatch.groupValues[2]
+                        try {
+                            fun hexStringToByteArray(s: String): ByteArray {
+                                val len = s.length
+                                val data = ByteArray(len / 2)
+                                var i = 0
+                                while (i < len) {
+                                    data[i / 2] = ((Character.digit(s[i], 16) shl 4) + Character.digit(s[i + 1], 16)).toByte()
+                                    i += 2
+                                }
+                                return data
+                            }
+                            val kidBase64 = android.util.Base64.encodeToString(hexStringToByteArray(kidHex), android.util.Base64.NO_WRAP or android.util.Base64.URL_SAFE).trim('=')
+                            val kBase64 = android.util.Base64.encodeToString(hexStringToByteArray(kHex), android.util.Base64.NO_WRAP or android.util.Base64.URL_SAFE).trim('=')
+                            val clearKeyJson = """{"keys":[{"kty":"oct","k":"$kBase64","kid":"$kidBase64"}],"type":"temporary"}"""
+                            resolvedLicenseUrl = "data:application/json;base64," + android.util.Base64.encodeToString(clearKeyJson.toByteArray(), android.util.Base64.NO_WRAP)
+                        } catch(e: Exception) {}
+                    }
+                }
+            }
+        }
         val isLocalPlayback = playbackUrl.contains("localhost", true) || playbackUrl.contains("127.0.0.1")
         val preferredPlaybackUrl =
             if (isLocalPlayback && !ch.m3u8Url.isNullOrBlank()) ch.m3u8Url ?: playbackUrl else playbackUrl
@@ -334,24 +382,25 @@ fun CloudPlayerScreen(
             normalizedHeaders.forEach { (k, v) -> defaultRequestProperties[k] = v }
             dataSourceFactory.setDefaultRequestProperties(defaultRequestProperties)
 
-            val useDrm = !ch.licenseUrl.isNullOrBlank() && !isFallbackAttempt
+            val useDrm = !resolvedLicenseUrl.isNullOrBlank() && !isFallbackAttempt
             if (useDrm) {
-                LogCollector.log("Configuring DRM: ${ch.licenseUrl}")
+                LogCollector.log("Configuring DRM: ${resolvedLicenseUrl}")
 
-                val isClearKey = ch.licenseUrl.contains("plkey.php", true) ||
-                                ch.licenseUrl.contains("key.php", true) ||
-                                ch.licenseUrl.contains("clearkey", true) ||
-                                ch.licenseUrl.contains("alex4528.site/jplus/license", true) ||
-                                (ch.licenseUrl.contains("results.php", true) &&
-                                    ch.licenseUrl.contains("keyid=", true) &&
-                                    ch.licenseUrl.contains("key=", true)) ||
+                val isClearKey = resolvedLicenseUrl!!.contains("plkey.php", true) ||
+                                resolvedLicenseUrl!!.contains("key.php", true) ||
+                                resolvedLicenseUrl!!.contains("clearkey", true) ||
+                                resolvedLicenseUrl!!.contains("alex4528.site/jplus/license", true) ||
+                                (resolvedLicenseUrl!!.contains("results.php", true) &&
+                                    resolvedLicenseUrl!!.contains("keyid=", true) &&
+                                    resolvedLicenseUrl!!.contains("key=", true)) ||
+                                resolvedLicenseUrl!!.contains("data:application/json", true) ||
                                 ch.type?.contains("clearkey", true) == true
 
                 val drmUuid = if (isClearKey) C.CLEARKEY_UUID else C.WIDEVINE_UUID
 
                 builder.setDrmConfiguration(
                     MediaItem.DrmConfiguration.Builder(drmUuid)
-                        .setLicenseUri(ch.licenseUrl)
+                        .setLicenseUri(resolvedLicenseUrl)
                         .setLicenseRequestHeaders(normalizedHeaders)
                         .setMultiSession(true)
                         .build()

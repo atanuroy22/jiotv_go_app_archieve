@@ -65,6 +65,11 @@ private const val ZEE5_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/c
 private const val SONY_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sony.json"
 private const val SPORTS_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sports.json"
 private const val FANCODE_SERVER_URL = "https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json"
+private const val TATA_BING_URL_ENC = "aHR0cHM6Ly9hbGxpbm9uZXJlYm9ybi5vbmxpbmUvdHBsYXkvY2hhbm5lbHMuanNvbg=="
+private const val JIO_CRYSTAL_URL_ENC = "aHR0cHM6Ly9hbGxpbm9uZXJlYm9ybi5vbmxpbmUvanR2LWZldGNoL2pzdHI0d2ViLmpzb24="
+
+private fun decodeUrl(encoded: String): String =
+    String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
 
 @Composable
 fun CloudMainScreen(
@@ -157,13 +162,23 @@ fun CloudMainScreen(
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
             logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
         )
+        val tataBingServer = CloudServer(
+            name = "Tata Bing",
+            url = decodeUrl(TATA_BING_URL_ENC),
+            logo = "https://www.tataplaybinge.com/assets/Binge_Logo.f02ba441.svg"
+        )
+        val jioCrystalServer = CloudServer(
+            name = "Jio Crystal",
+            url = decodeUrl(JIO_CRYSTAL_URL_ENC),
+            logo = "https://i.ibb.co/N2yz4PkY/1738743366692.png"
+        )
         val fancodeServer = CloudServer(
             name = "Fancode Live",
             url = FANCODE_SERVER_URL,
             logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2021/06/26/60d9761924e40.png"
         )
         val fetched = if (isSubscribed) {
-            (jioServers + listOf(freeJio, fancodeServer) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
+            (jioServers + listOf(freeJio, fancodeServer, tataBingServer, jioCrystalServer) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
         } else {
             listOf(freeJio)
         }
@@ -208,10 +223,12 @@ fun CloudMainScreen(
 
             var retryCount = 0
             val isLocal = server.url.contains("localhost") || server.url.contains("127.0.0.1")
+            val isTataBing = server.name.contains("Tata Bing", ignoreCase = true)
+            val isCrystal = server.name.contains("Crystal", ignoreCase = true)
 
             while (retryCount < 5) {
                 try {
-                    val fetchedChannels = repository.fetchChannels(server.url)
+                    val fetchedChannels = repository.fetchChannels(server.url, forceRefresh = isTataBing || isCrystal)
                     if (fetchedChannels.isNotEmpty()) {
                         channels = fetchedChannels
                         errorMessage = null

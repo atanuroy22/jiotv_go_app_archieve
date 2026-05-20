@@ -55,6 +55,8 @@ private const val CLOUD_SRC_B = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV
 private const val CLOUD_SRC_C = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zb255Lmpzb24="
 private const val CLOUD_SRC_D = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zcG9ydHMuanNvbg=="
 private const val CLOUD_SRC_E = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2RybWxpdmUvZmFuY29kZS1saXZlLWV2ZW50cy9tYWluL2ZhbmNvZGUuanNvbg=="
+private const val CLOUD_SRC_F = "aHR0cHM6Ly9hbGxpbm9uZXJlYm9ybi5vbmxpbmUvdHBsYXkvY2hhbm5lbHMuanNvbg=="
+private const val CLOUD_SRC_G = "aHR0cHM6Ly9hbGxpbm9uZXJlYm9ybi5vbmxpbmUvanR2LWZldGNoL2pzdHI0d2ViLmpzb24="
 
 private fun decodeCloudUrl(encoded: String): String =
     String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
@@ -111,6 +113,11 @@ fun CloudHomeScreen(
             url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
             logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
         )
+        val tataBingServer = CloudServer(
+            name = "Tata Bing",
+            url = decodeCloudUrl(CLOUD_SRC_F),
+            logo = "https://www.tataplaybinge.com/assets/Binge_Logo.f02ba441.svg"
+        )
         
         val fancodeServer = CloudServer(
             name = "Fancode Live",
@@ -118,9 +125,15 @@ fun CloudHomeScreen(
             logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2021/06/26/60d9761924e40.png"
         )
 
+        val jioCrystalServer = CloudServer(
+            name = "Jio Crystal",
+            url = decodeCloudUrl(CLOUD_SRC_G),
+            logo = "https://i.ibb.co/N2yz4PkY/1738743366692.png"
+        )
+
         // Reorder: Jio first, then Free Jio, then others. Hide Zee5 and Sports by default.
         val baseList = if (isSubscribed) {
-            (jioServers + listOf(freeJio, fancodeServer) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
+            (jioServers + listOf(freeJio, fancodeServer, tataBingServer, jioCrystalServer) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
         } else {
             listOf(freeJio)
         }
@@ -138,7 +151,9 @@ fun CloudHomeScreen(
                     val isFancode = server.name.contains("fancode", ignoreCase = true)
                     val isZeeSd = server.name.contains("zee", ignoreCase = true) &&
                         server.name.contains("sd", ignoreCase = true)
-                    !(isJio || isSonyIn || isFancode || isZeeSd) || (isSlow && !isJio)
+                    val isTataBing = server.name.contains("tata bing", ignoreCase = true)
+                    val isCrystal = server.name.contains("crystal", ignoreCase = true)
+                    !(isJio || isSonyIn || isFancode || isZeeSd || isTataBing || isCrystal) || (isSlow && !isJio)
                 }
                 .map { it.url }
                 .toMutableList()

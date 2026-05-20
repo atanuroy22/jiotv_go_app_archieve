@@ -252,7 +252,10 @@ object CloudParsers {
                 "playUrl"
             )
 
-            val rawUrl = m3uRaw?.trim().orEmpty()
+            val keyId = obj.firstStringOf("keyId", "kid", "key_id")
+            val key = obj.firstStringOf("key", "k")
+
+            var finalM3uRaw = m3uRaw; if (finalM3uRaw.isNullOrBlank() && !id.isNullOrBlank()) { finalM3uRaw = "https://allinonereborn.online/tplay/play.php?id=$id" }; val rawUrl = finalM3uRaw?.trim().orEmpty()
             val isPlaylistLink = rawUrl.isNotBlank() && (
                 rawUrl.contains(".json", true) ||
                     rawUrl.endsWith(".txt", true) ||
@@ -260,7 +263,26 @@ object CloudParsers {
                     rawUrl.contains("playlist", true)
                 )
 
-            val licenseUrl = obj.firstStringOf("license_url", "licenseUrl", "license", "drm_license", "drm", "license_url")
+            var licenseUrl = obj.firstStringOf("license_url", "licenseUrl", "license", "drm_license", "drm", "license_url")
+
+            if (licenseUrl.isNullOrBlank() && !keyId.isNullOrBlank() && !key.isNullOrBlank() && keyId != "null" && key != "null") {
+                try {
+                    fun hexToB64(hex: String): String {
+                        val len = hex.length
+                        val data = ByteArray(len / 2)
+                        var i = 0
+                        while (i < len) {
+                            data[i / 2] = ((Character.digit(hex[i], 16) shl 4) + Character.digit(hex[i + 1], 16)).toByte()
+                            i += 2
+                        }
+                        return android.util.Base64.encodeToString(data, android.util.Base64.NO_WRAP or android.util.Base64.URL_SAFE).trim('=')
+                    }
+                    val kidB64 = hexToB64(keyId!!)
+                    val kB64 = hexToB64(key!!)
+                    val ckJson = """{"keys":[{"kty":"oct","k":"$kB64","kid":"$kidB64"}],"type":"temporary"}"""
+                    licenseUrl = "data:application/json;base64," + android.util.Base64.encodeToString(ckJson.toByteArray(), android.util.Base64.NO_WRAP)
+                } catch (_: Exception) {}
+            }
 
             val headers = obj.get("headers")?.let { headersElement ->
                 when {
@@ -300,14 +322,14 @@ object CloudParsers {
 
             val resolvedMpd = when {
                 !mpdRaw.isNullOrBlank() -> mpdRaw
-                !m3uRaw.isNullOrBlank() && m3uRaw.contains(".mpd", true) -> m3uRaw
-                type?.contains("dash", true) == true && !m3uRaw.isNullOrBlank() -> m3uRaw
+                !finalM3uRaw.isNullOrBlank() && finalM3uRaw.contains(".mpd", true) -> finalM3uRaw
+                type?.contains("dash", true) == true && !finalM3uRaw.isNullOrBlank() -> finalM3uRaw
                 else -> null
             }
 
             val resolvedM3u8 = when {
-                !m3uRaw.isNullOrBlank() && m3uRaw.contains(".m3u", true) -> m3uRaw
-                resolvedMpd == null && !m3uRaw.isNullOrBlank() -> m3uRaw
+                !finalM3uRaw.isNullOrBlank() && finalM3uRaw.contains(".m3u", true) -> finalM3uRaw
+                resolvedMpd == null && !finalM3uRaw.isNullOrBlank() -> finalM3uRaw
                 else -> null
             }
 
