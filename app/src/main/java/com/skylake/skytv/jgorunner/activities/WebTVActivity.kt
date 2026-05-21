@@ -315,6 +315,16 @@ class WebPlayerActivity : ComponentActivity() {
     private fun setupWebView() {
         webView!!.webViewClient = CustomWebViewClient()
         webView!!.webChromeClient = object : WebChromeClient() {
+            override fun onCreateWindow(
+                view: WebView?,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: android.os.Message?
+            ): Boolean {
+                Log.d(TAG, "Blocked popup window request")
+                return false
+            }
+
             override fun onPermissionRequest(request: PermissionRequest?) {
                 // Shaka/Widevine in WebView may request protected media. Granting on the UI
                 // thread prevents silent DRM-denied fallback to non-DRM playback paths.
@@ -353,6 +363,7 @@ class WebPlayerActivity : ComponentActivity() {
         webSettings.defaultTextEncodingName = "utf-8"
         webSettings.mixedContentMode = 0
         webSettings.mediaPlaybackRequiresUserGesture = false // Allow autoplay
+        webSettings.javaScriptCanOpenWindowsAutomatically = false
 
         // Ensure hardware accelerated rendering path is used for video/DRM playback.
         webView!!.setLayerType(View.LAYER_TYPE_HARDWARE, null)
@@ -534,6 +545,18 @@ class WebPlayerActivity : ComponentActivity() {
     private inner class CustomWebViewClient : WebViewClient() {
         @Deprecated("Deprecated in Java")
         override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+            val isAllowedHost = url.contains("localhost", ignoreCase = true) ||
+                url.contains("allinonereborn.online", ignoreCase = true) ||
+                url.contains("mini.allinonereborn.fun", ignoreCase = true)
+            val isPlayerLikeUrl = url.contains("/player/", ignoreCase = true) ||
+                url.contains("/mpd/", ignoreCase = true) ||
+                url.contains(".mpd", ignoreCase = true)
+
+            if (!isAllowedHost && !isPlayerLikeUrl && !url.contains("/tplay/", ignoreCase = true)) {
+            Log.d(TAG, "Blocked non-player navigation: $url")
+            return true
+            }
+
             val isDrmLikeUrl = url.contains("/play/", ignoreCase = true) ||
                     url.contains("/mpd/", ignoreCase = true) ||
                     url.contains(".mpd", ignoreCase = true) ||
@@ -560,8 +583,17 @@ class WebPlayerActivity : ComponentActivity() {
                 }
             }
 
-            // Only redirect /play/ URLs to ExoPlayer if DRM is disabled.
+            // Keep Tata Play /play/ URLs inside the WebView browser flow.
             if (url.contains("/play/")) {
+                if (url.contains("allinonereborn.online", ignoreCase = true) ||
+                    url.contains("mini.allinonereborn.fun", ignoreCase = true) ||
+                    !targetChannelId.isNullOrBlank()
+                ) {
+                    initURL = webView!!.url
+                    Log.d(TAG, "Keeping Tata /play/ route in WebView: $url")
+                    return false
+                }
+
                 initURL = webView!!.url
                 Log.d(TAG, "Saving initURL: $initURL")
 

@@ -210,8 +210,12 @@ fun CloudPlayerScreen(
                             playerError = "${error.errorCodeName}\n${error.message}"
                         }
 
+                        val isNonRetryableHttp403 =
+                            error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS &&
+                                error.message?.contains("403", ignoreCase = true) == true
+
                         // Only auto-retry if NOT attempting a fallback and we haven't reached max retries
-                        if (!isSilentTransition && retryCountRef.value < 5) {
+                        if (!isSilentTransition && !isNonRetryableHttp403 && retryCountRef.value < 5) {
                             retryCountRef.value++
                             LogCollector.log("Auto-retrying playback ($retryCountRef/5)...")
                             Handler(Looper.getMainLooper()).postDelayed({
@@ -274,34 +278,50 @@ fun CloudPlayerScreen(
             normalizedHeaders[key] = v
         }
 
-        val channelUserAgent = ch.userAgent?.trim().orEmpty()
-        val looksLikeRealUserAgent = channelUserAgent.contains("Mozilla", ignoreCase = true) ||
-            channelUserAgent.contains("JioTV", ignoreCase = true) ||
-            channelUserAgent.contains("AppleWebKit", ignoreCase = true) ||
-            channelUserAgent.contains("Chrome", ignoreCase = true)
-        if (looksLikeRealUserAgent && !normalizedHeaders.containsKey("User-Agent")) {
-            normalizedHeaders["User-Agent"] = channelUserAgent
-        }
-
         playerError = null
         retryCountRef.value = 0
 
         var resolvedLicenseUrl = ch.licenseUrl
         var playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
 
+        val channelUserAgent = ch.userAgent?.trim().orEmpty()
+        val looksLikeRealUserAgent = channelUserAgent.contains("Mozilla", ignoreCase = true) ||
+            channelUserAgent.contains("JioTV", ignoreCase = true) ||
+            channelUserAgent.contains("AppleWebKit", ignoreCase = true) ||
+            channelUserAgent.contains("Chrome", ignoreCase = true)
+        if (!normalizedHeaders.containsKey("User-Agent")) {
+            normalizedHeaders["User-Agent"] = when {
+                looksLikeRealUserAgent -> channelUserAgent
+                playbackUrl.contains("jio.com", true) || playbackUrl.contains("jio.dev", true) ->
+                    "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
+                else -> channelUserAgent
+            }
+        }
+
         val shouldUseWebView = playbackUrl.contains("tplay/play.php", true) || playbackUrl.contains("/tplay/play.php", true)
         if (shouldUseWebView) {
             try {
-                val intent = android.content.Intent(context, com.skylake.skytv.jgorunner.activities.WebPlayerActivity::class.java).apply {
+                val intent = Intent(context, com.skylake.skytv.jgorunner.activities.WebPlayerActivity::class.java).apply {
                     putExtra("startup_url", "https://allinonereborn.online/tplay/")
                     putExtra("target_channel_id", ch.id ?: "")
                 }
                 context.startActivity(intent)
             } catch (e: Exception) {
-                LogCollector.log("Failed to open WebPlayerActivity: ${e.message}")
+                LogCollector.log("Failed to open WebPlayerActivity for Tata Play: ${e.message}")
             }
-            showChannelOverlay = true
-            overlayVisibilityTick = System.currentTimeMillis()
+            return@LaunchedEffect
+        }
+
+        val shouldUseBrowserPlayer = playbackUrl.contains("jio.com", true) || playbackUrl.contains("jio.dev", true)
+        if (shouldUseBrowserPlayer) {
+            try {
+                val intent = Intent(context, com.skylake.skytv.jgorunner.activities.WebPlayerActivity::class.java).apply {
+                    putExtra("startup_url", playbackUrl)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                LogCollector.log("Failed to open WebPlayerActivity for Jio: ${e.message}")
+            }
             return@LaunchedEffect
         }
 
