@@ -60,11 +60,11 @@ import com.skylake.skytv.jgorunner.core.execution.runBinary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val JIO_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/jiotv+.json"
-private const val ZEE5_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/zee5.json"
-private const val SONY_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sony.json"
-private const val SPORTS_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sports.json"
-private const val FANCODE_SERVER_URL = "https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json"
+private const val JIO_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9qaW90disuanNvbg=="
+private const val ZEE5_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC96ZWU1Lmpzb24="
+private const val SONY_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zb255Lmpzb24="
+private const val SPORTS_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zcG9ydHMuanNvbg=="
+private const val FANCODE_SERVER_URL_ENC = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2RybWxpdmUvZmFuY29kZS1saXZlLWV2ZW50cy9tYWluL2ZhbmNvZGUuanNvbg=="
 private const val TATA_BING_URL_ENC = "aHR0cHM6Ly9hbGxpbm9uZXJlYm9ybi5vbmxpbmUvdHBsYXkvY2hhbm5lbHMuanNvbg=="
 private const val JIO_CRYSTAL_URL_ENC = "aHR0cHM6Ly9hbGxpbm9uZXJlYm9ybi5vbmxpbmUvanR2LWZldGNoL2pzdHI0d2ViLmpzb24="
 
@@ -152,10 +152,10 @@ fun CloudMainScreen(
     }
 
     LaunchedEffect(Unit) {
-        val jioServers = repository.fetchServers(JIO_SERVER_LIST_URL)
-        val zee5Servers = selectSdServerWithFallback(repository.fetchServers(ZEE5_SERVER_LIST_URL))
-        val sonyServers = repository.fetchServers(SONY_SERVER_LIST_URL)
-        val sportsServers = repository.fetchServers(SPORTS_SERVER_LIST_URL)
+        val jioServers = repository.fetchServers(decodeUrl(JIO_SERVER_LIST_URL_ENC))
+        val zee5Servers = selectSdServerWithFallback(repository.fetchServers(decodeUrl(ZEE5_SERVER_LIST_URL_ENC)))
+        val sonyServers = repository.fetchServers(decodeUrl(SONY_SERVER_LIST_URL_ENC))
+        val sportsServers = repository.fetchServers(decodeUrl(SPORTS_SERVER_LIST_URL_ENC))
         val isSubscribed = preferenceManager.myPrefs.cloudSubExpiry > System.currentTimeMillis()
         val freeJio = CloudServer(
             name = "Free Jio",
@@ -170,11 +170,11 @@ fun CloudMainScreen(
         val jioCrystalServer = CloudServer(
             name = "Jio Crystal",
             url = decodeUrl(JIO_CRYSTAL_URL_ENC),
-            logo = "https://i.ibb.co/N2yz4PkY/1738743366692.png"
+            logo = "https://yt3.googleusercontent.com/ytc/AIdro_lKULdxBE4H3HJlomG_vs3XMDk6FnCQA6zgO0EVZH5Kvg=s900-c-k-c0x00ffffff-no-rj"
         )
         val fancodeServer = CloudServer(
             name = "Fancode Live",
-            url = FANCODE_SERVER_URL,
+            url = decodeUrl(FANCODE_SERVER_URL_ENC),
             logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2021/06/26/60d9761924e40.png"
         )
         val fetched = if (isSubscribed) {
