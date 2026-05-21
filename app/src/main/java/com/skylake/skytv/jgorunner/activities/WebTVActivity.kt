@@ -184,12 +184,20 @@ class WebPlayerActivity : ComponentActivity() {
                                         margin: 0 !important;
                                         padding: 0 !important;
                                         background: black !important;
+                                        background-color: black !important;
                                         overflow: hidden !important;
+                                        color: transparent !important;
+                                    }
+                                    * {
+                                        background-color: transparent !important;
+                                        border-color: transparent !important;
                                     }
                                     .shaka-video-container,
                                     .shaka-player-container,
                                     .player,
                                     .video-container,
+                                    #player,
+                                    .jio-player,
                                     iframe {
                                         width: 100% !important;
                                         height: 100% !important;
@@ -200,6 +208,11 @@ class WebPlayerActivity : ComponentActivity() {
                                         margin: 0 !important;
                                         padding: 0 !important;
                                         overflow: hidden !important;
+                                        background: black !important;
+                                        background-color: black !important;
+                                        display: block !important;
+                                        visibility: visible !important;
+                                        opacity: 1 !important;
                                     }
                                     video {
                                         width: 100% !important;
@@ -213,6 +226,15 @@ class WebPlayerActivity : ComponentActivity() {
                                         opacity: 1 !important;
                                         visibility: visible !important;
                                         background: black !important;
+                                        background-color: black !important;
+                                    }
+                                    /* Hide all potential overlays and popups */
+                                    div[class*="popup"], div[class*="modal"], div[class*="overlay"], 
+                                    div[class*="ads"], div[id*="ads"], iframe[src*="google"],
+                                    .fc-consent-root, .tp-backdrop, .tp-modal {
+                                        display: none !important;
+                                        opacity: 0 !important;
+                                        pointer-events: none !important;
                                     }
                                 `;
 
@@ -563,6 +585,15 @@ class WebPlayerActivity : ComponentActivity() {
                     url.contains(".mpd", ignoreCase = true) ||
                     url.contains("/play/", ignoreCase = true)
 
+            // Block common ad domains and popups for Jio Crystal
+            if (url.contains("jtvxweb", ignoreCase = true) || url.contains("/pind", ignoreCase = true)) {
+                if (url.contains("ads", ignoreCase = true) || url.contains("doubleclick", ignoreCase = true) || 
+                    url.contains("pop-under", ignoreCase = true) || url.contains("google", ignoreCase = true)) {
+                    Log.d(TAG, "Blocked Ad Redirect: $url")
+                    return true
+                }
+            }
+
             if (!isAllowedRoute) {
                 Log.d(TAG, "Blocked non-player navigation: $url")
             return true
@@ -725,65 +756,54 @@ class WebPlayerActivity : ComponentActivity() {
             }
         }
 
-        private fun forceUnmutePlayer(view: WebView) {
+        fun forceUnmutePlayer(view: WebView) {
             view.evaluateJavascript(
                 """
                 (function() {
                     try {
                         function doUnmute() {
                             var videos = document.querySelectorAll('video');
-                            var unmutedAny = false;
                             videos.forEach(function(v) {
-                                v.muted = false;
-                                v.volume = 1.0;
-                                v.removeAttribute('muted');
+                                if (v.muted || v.volume === 0) {
+                                    v.muted = false;
+                                    v.volume = 1.0;
+                                    v.removeAttribute('muted');
+                                    // Some players need a small delay after unmuting to start audio
+                                    setTimeout(() => { v.muted = false; v.volume = 1.0; }, 100);
+                                }
                                 if (v.paused && v.readyState >= 2) {
-                                    try { v.play(); } catch(e) {}
-                                }
-                                if (v.paused) {
-                                    try { v.click(); } catch(e) {}
-                                }
-                                if (!v.muted) unmutedAny = true;
-                            });
-                            
-                            var buttons = Array.from(document.querySelectorAll('button,[role="button"],i,svg,a,span'));
-                            buttons.forEach(function(el) {
-                                var text = (el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title'))) || el.innerText || '';
-                                text = String(text).toLowerCase();
-                                if (text.indexOf('mute') >= 0 || text.indexOf('unmute') >= 0 || text.indexOf('volume') >= 0 || text.indexOf('sound') >= 0) {
-                                    try { 
-                                        el.click(); 
-                                        unmutedAny = true;
-                                    } catch (e) {}
+                                    v.play().catch(function(e){});
                                 }
                             });
                             
-                            // If still muted or no video found, try a generic click on the player container
-                            if (!unmutedAny) {
-                                var player = document.querySelector('.shaka-video-container') || document.querySelector('#player') || document.body;
-                                if (player) {
-                                    try {
-                                        var clickEvent = new MouseEvent('click', {
-                                            view: window,
-                                            bubbles: true,
-                                            cancelable: true
-                                        });
-                                        player.dispatchEvent(clickEvent);
-                                    } catch(e) {}
-                                }
-                            }
+                            // Aggressively search for mute/unmute/volume buttons by multiple criteria
+                            var selectors = [
+                                'button', '[role="button"]', 'i', 'svg', 'a', 'span', 'div'
+                            ];
+                            selectors.forEach(function(sel) {
+                                document.querySelectorAll(sel).forEach(function(el) {
+                                    var label = (el.getAttribute('aria-label') || el.getAttribute('title') || el.className || el.id || el.innerText || '').toLowerCase();
+                                    var isMuteButton = label.includes('mute') || label.includes('volume') || label.includes('sound') || label.includes('audio');
+                                    
+                                    // Specifically check if it's currently in a 'muted' state via icon or text
+                                    if (isMuteButton) {
+                                        var isActuallyMuted = label.includes('unmute') || label.includes('off') || label.includes('no-') || label.includes('silent');
+                                        if (isActuallyMuted || el.querySelector('svg[class*="mute"], i[class*="mute"]')) {
+                                            try { el.click(); } catch(e) {}
+                                        }
+                                    }
+                                });
+                            });
                         }
                         
+                        // Run immediately and then on an interval to catch dynamic changes
                         doUnmute();
-                        // Repeat more frequently at first, then less often
-                        setTimeout(doUnmute, 500);
-                        setTimeout(doUnmute, 1500);
-                        setTimeout(doUnmute, 3000);
-                        setTimeout(doUnmute, 6000);
+                        var unmuteInterval = setInterval(doUnmute, 2000);
+                        setTimeout(() => clearInterval(unmuteInterval), 20000);
                         
-                        return 'ok';
+                        return 'unmute_triggered';
                     } catch (e) {
-                        return 'error';
+                        return 'unmute_error: ' + e.message;
                     }
                 })();
                 """.trimIndent(),
@@ -806,12 +826,20 @@ class WebPlayerActivity : ComponentActivity() {
                                 margin: 0 !important;
                                 padding: 0 !important;
                                 background: black !important;
+                                background-color: black !important;
                                 overflow: hidden !important;
+                                color: transparent !important;
+                            }
+                            * {
+                                background-color: transparent !important;
+                                border-color: transparent !important;
                             }
                             .shaka-video-container,
                             .shaka-player-container,
                             .player,
                             .video-container,
+                            #player,
+                            .jio-player,
                             iframe {
                                 width: 100% !important;
                                 height: 100% !important;
@@ -822,6 +850,11 @@ class WebPlayerActivity : ComponentActivity() {
                                 margin: 0 !important;
                                 padding: 0 !important;
                                 overflow: hidden !important;
+                                background: black !important;
+                                background-color: black !important;
+                                display: block !important;
+                                visibility: visible !important;
+                                opacity: 1 !important;
                             }
                             video {
                                 width: 100% !important;
@@ -835,6 +868,14 @@ class WebPlayerActivity : ComponentActivity() {
                                 opacity: 1 !important;
                                 visibility: visible !important;
                                 background: black !important;
+                                background-color: black !important;
+                            }
+                            div[class*="popup"], div[class*="modal"], div[class*="overlay"], 
+                            div[class*="ads"], div[id*="ads"], iframe[src*="google"],
+                            .fc-consent-root, .tp-backdrop, .tp-modal {
+                                display: none !important;
+                                opacity: 0 !important;
+                                pointer-events: none !important;
                             }
                         `;
 
@@ -872,7 +913,7 @@ class WebPlayerActivity : ComponentActivity() {
                                 body.style.maxHeight = px;
                                 body.style.overflow = 'hidden';
 
-                                var selectors = ['.shaka-video-container','.shaka-player-container','.player','.video-container','#player','iframe'];
+                                var selectors = ['.shaka-video-container','.shaka-player-container','.player','.video-container','#player','.jio-player','iframe'];
                                 selectors.forEach(function(sel) {
                                     document.querySelectorAll(sel).forEach(function(el) {
                                         el.style.height = px;

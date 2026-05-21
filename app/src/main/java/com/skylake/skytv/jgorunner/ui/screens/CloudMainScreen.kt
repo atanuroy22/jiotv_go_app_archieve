@@ -178,7 +178,7 @@ fun CloudMainScreen(
             logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2021/06/26/60d9761924e40.png"
         )
         val fetched = if (isSubscribed) {
-            (jioServers + listOf(jioCrystalServer, freeJio, fancodeServer, tataBingServer) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
+            (jioServers + listOf(freeJio, fancodeServer) + zee5Servers + sonyServers + sportsServers + listOf(tataBingServer, jioCrystalServer)).distinctBy { it.url }
         } else {
             listOf(freeJio)
         }
