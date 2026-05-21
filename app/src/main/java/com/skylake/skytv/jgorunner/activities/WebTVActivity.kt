@@ -186,11 +186,6 @@ class WebPlayerActivity : ComponentActivity() {
                                         background: black !important;
                                         background-color: black !important;
                                         overflow: hidden !important;
-                                        color: transparent !important;
-                                    }
-                                    * {
-                                        background-color: transparent !important;
-                                        border-color: transparent !important;
                                     }
                                     .shaka-video-container,
                                     .shaka-player-container,
@@ -228,10 +223,9 @@ class WebPlayerActivity : ComponentActivity() {
                                         background: black !important;
                                         background-color: black !important;
                                     }
-                                    /* Hide all potential overlays and popups */
-                                    div[class*="popup"], div[class*="modal"], div[class*="overlay"], 
-                                    div[class*="ads"], div[id*="ads"], iframe[src*="google"],
-                                    .fc-consent-root, .tp-backdrop, .tp-modal {
+                                    /* Less aggressive hiding to avoid adblock detection */
+                                    .fc-consent-root, .tp-backdrop, .tp-modal,
+                                    div[id*="pop"], div[class*="pop"] {
                                         display: none !important;
                                         opacity: 0 !important;
                                         pointer-events: none !important;
@@ -585,11 +579,10 @@ class WebPlayerActivity : ComponentActivity() {
                     url.contains(".mpd", ignoreCase = true) ||
                     url.contains("/play/", ignoreCase = true)
 
-            // Block common ad domains and popups for Jio Crystal
+            // Block only aggressive pop-under and ad-specific domains that cause white screens
             if (url.contains("jtvxweb", ignoreCase = true) || url.contains("/pind", ignoreCase = true)) {
-                if (url.contains("ads", ignoreCase = true) || url.contains("doubleclick", ignoreCase = true) || 
-                    url.contains("pop-under", ignoreCase = true) || url.contains("google", ignoreCase = true)) {
-                    Log.d(TAG, "Blocked Ad Redirect: $url")
+                if (url.contains("doubleclick", ignoreCase = true) || url.contains("pop-under", ignoreCase = true)) {
+                    Log.d(TAG, "Blocked Aggressive Ad Redirect: $url")
                     return true
                 }
             }
@@ -828,11 +821,6 @@ class WebPlayerActivity : ComponentActivity() {
                                 background: black !important;
                                 background-color: black !important;
                                 overflow: hidden !important;
-                                color: transparent !important;
-                            }
-                            * {
-                                background-color: transparent !important;
-                                border-color: transparent !important;
                             }
                             .shaka-video-container,
                             .shaka-player-container,
@@ -870,9 +858,8 @@ class WebPlayerActivity : ComponentActivity() {
                                 background: black !important;
                                 background-color: black !important;
                             }
-                            div[class*="popup"], div[class*="modal"], div[class*="overlay"], 
-                            div[class*="ads"], div[id*="ads"], iframe[src*="google"],
-                            .fc-consent-root, .tp-backdrop, .tp-modal {
+                            .fc-consent-root, .tp-backdrop, .tp-modal,
+                            div[id*="pop"], div[class*="pop"] {
                                 display: none !important;
                                 opacity: 0 !important;
                                 pointer-events: none !important;
