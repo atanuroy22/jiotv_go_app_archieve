@@ -125,7 +125,7 @@ class WebPlayerActivity : ComponentActivity() {
                 if (webView != null) {
                     val currentUrl = webView!!.url
 
-                    if (currentUrl != null && currentUrl.contains("/player/")) {
+                    if (isPlayerLikeUrl(currentUrl)) {
                         playerUrlCount++
                         if (playerUrlCount >= 3) {
                             webView!!.loadUrl(initURL!!)
@@ -315,18 +315,6 @@ class WebPlayerActivity : ComponentActivity() {
     private fun setupWebView() {
         webView!!.webViewClient = CustomWebViewClient()
         webView!!.webChromeClient = object : WebChromeClient() {
-            override fun onCreateWindow(
-                view: WebView?,
-                isDialog: Boolean,
-                isUserGesture: Boolean,
-                resultMsg: android.os.Message?
-            ): Boolean {
-                val transport = resultMsg?.obj as? WebView.WebViewTransport
-                transport?.webView = view
-                resultMsg?.sendToTarget()
-                return true
-            }
-
             override fun onPermissionRequest(request: PermissionRequest?) {
                 // Shaka/Widevine in WebView may request protected media. Granting on the UI
                 // thread prevents silent DRM-denied fallback to non-DRM playback paths.
@@ -366,8 +354,8 @@ class WebPlayerActivity : ComponentActivity() {
         webSettings.defaultTextEncodingName = "utf-8"
         webSettings.mixedContentMode = 0
         webSettings.mediaPlaybackRequiresUserGesture = false // Allow autoplay
-        webSettings.javaScriptCanOpenWindowsAutomatically = true
-        webSettings.setSupportMultipleWindows(true)
+        webSettings.javaScriptCanOpenWindowsAutomatically = false
+        webSettings.setSupportMultipleWindows(false)
         
         // Set a high-compatibility mobile User-Agent for Jio and Tata
         val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
@@ -381,6 +369,12 @@ class WebPlayerActivity : ComponentActivity() {
         webView!!.isFocusable = true
         webView!!.isFocusableInTouchMode = true
         webView!!.requestFocus(View.FOCUS_DOWN)
+        
+        webView!!.setOnLongClickListener { true }
+        webView!!.setOnTouchListener { v, _ ->
+            v.requestFocus()
+            false
+        }
     }
 
     private fun loadUrl() {
@@ -458,7 +452,8 @@ class WebPlayerActivity : ComponentActivity() {
         return currentUrl.contains("/player/") ||
                 currentUrl.contains("/mpd/", ignoreCase = true) ||
                 currentUrl.contains(".mpd", ignoreCase = true) ||
-                currentUrl.contains("/pind", ignoreCase = true)
+                currentUrl.contains("/pind", ignoreCase = true) ||
+                currentUrl.contains("jtvxweb", ignoreCase = true)
     }
 
     private fun forwardDpadToWebView(event: KeyEvent): Boolean {
@@ -618,10 +613,8 @@ class WebPlayerActivity : ComponentActivity() {
 
         override fun onPageFinished(view: WebView, url: String) {
             loadingSpinner!!.visibility = View.GONE
-            val isPlayerLikeUrl = url.contains("/player/") ||
-                    url.contains("/mpd/", ignoreCase = true) ||
-                    url.contains(".mpd", ignoreCase = true)
-            if (isPlayerLikeUrl) {
+            val isPlayer = isPlayerLikeUrl(url)
+            if (isPlayer) {
                 Log.d(TAG, "Playing: $url")
                 setupFullScreenMode()
                 centerPlayerInWebUi(view)
@@ -631,6 +624,8 @@ class WebPlayerActivity : ComponentActivity() {
                     """
                     (function() {
                         try {
+                            window.open = function(url) { window.location.href = url; return null; };
+                            window.close = function() { console.log('window.close blocked'); };
                             if (document && document.body) {
                                 if (document.body.tabIndex < 0) {
                                     document.body.tabIndex = 0;
@@ -642,7 +637,9 @@ class WebPlayerActivity : ComponentActivity() {
                     """.trimIndent(),
                     null
                 )
-            } else if (url.contains("/tplay/", ignoreCase = true) && !targetChannelId.isNullOrBlank()) {
+            } 
+            
+            if (url.contains("/tplay/", ignoreCase = true) && !targetChannelId.isNullOrBlank()) {
                 val channelId = targetChannelId.orEmpty()
                 
                 // Hide the list immediately and all surrounding UI
