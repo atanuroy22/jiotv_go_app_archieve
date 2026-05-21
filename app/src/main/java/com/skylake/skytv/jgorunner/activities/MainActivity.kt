@@ -255,7 +255,9 @@ class MainActivity : ComponentActivity() {
                                 onNavigate = { currentScreen = it },
                                 onPlayChannel = { channel, list ->
                                     if (selectedServer?.name?.contains("Crystal", ignoreCase = true) == true) {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://jtvxweb.pages.dev/pind?id=${channel.id}"))
+                                        val intent = Intent(this@MainActivity, WebPlayerActivity::class.java).apply {
+                                            putExtra("startup_url", "https://jtvxweb.pages.dev/pind?id=${channel.id}")
+                                        }
                                         startActivity(intent)
                                     } else {
                                         val intent = Intent(this@MainActivity, CloudPlayerActivity::class.java).apply {

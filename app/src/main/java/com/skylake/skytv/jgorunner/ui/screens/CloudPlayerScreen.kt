@@ -285,16 +285,18 @@ fun CloudPlayerScreen(
         var playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
 
         val isCrystalServer = serverUrl?.contains("jstr4web.json", ignoreCase = true) == true
-        if (isCrystalServer) {
-            try {
-                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://jtvxweb.pages.dev/pind?id=${ch.id}"))
-                context.startActivity(intent)
-                (context as? Activity)?.finish()
-            } catch (e: Exception) {
-                LogCollector.log("Failed to open Browser for Jio Crystal: ${e.message}")
-            }
-            return@LaunchedEffect
-        }
+         if (isCrystalServer) {
+             try {
+                 val intent = Intent(context, com.skylake.skytv.jgorunner.activities.WebPlayerActivity::class.java).apply {
+                     putExtra("startup_url", "https://jtvxweb.pages.dev/pind?id=${ch.id}")
+                 }
+                 context.startActivity(intent)
+                 (context as? Activity)?.finish()
+             } catch (e: Exception) {
+                 LogCollector.log("Failed to open Web TV for Jio Crystal: ${e.message}")
+             }
+             return@LaunchedEffect
+         }
 
         val channelUserAgent = ch.userAgent?.trim().orEmpty()
         val looksLikeRealUserAgent = channelUserAgent.contains("Mozilla", ignoreCase = true) ||

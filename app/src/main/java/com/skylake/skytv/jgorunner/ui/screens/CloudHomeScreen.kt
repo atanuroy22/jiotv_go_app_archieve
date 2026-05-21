@@ -133,7 +133,7 @@ fun CloudHomeScreen(
 
         // Reorder: Jio first, then Free Jio, then others. Hide Zee5 and Sports by default.
         val baseList = if (isSubscribed) {
-            (jioServers + listOf(freeJio, fancodeServer, tataBingServer, jioCrystalServer) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
+            (jioServers + listOf(jioCrystalServer, freeJio, fancodeServer, tataBingServer) + zee5Servers + sonyServers + sportsServers).distinctBy { it.url }
         } else {
             listOf(freeJio)
         }
@@ -153,7 +153,7 @@ fun CloudHomeScreen(
                         server.name.contains("sd", ignoreCase = true)
                     val isTataBing = server.name.contains("tata bing", ignoreCase = true)
                     val isCrystal = server.name.contains("crystal", ignoreCase = true)
-                    !(isJio || isSonyIn || isFancode || isZeeSd || isTataBing) || (isSlow && !isJio) || isCrystal
+                    !(isJio || isSonyIn || isFancode || isZeeSd || isTataBing) || (isSlow && !isJio)
                 }
                 .map { it.url }
                 .toMutableList()
