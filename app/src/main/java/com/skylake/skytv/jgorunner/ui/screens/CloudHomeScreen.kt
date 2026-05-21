@@ -128,7 +128,7 @@ fun CloudHomeScreen(
         val jioCrystalServer = CloudServer(
             name = "Jio Crystal",
             url = decodeCloudUrl(CLOUD_SRC_G),
-            logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
+            logo = "https://iili.io/f1zkPwP.md.png"
         )
 
         // Reorder: Jio first, then Free Jio, then others. Hide Zee5 and Sports by default.

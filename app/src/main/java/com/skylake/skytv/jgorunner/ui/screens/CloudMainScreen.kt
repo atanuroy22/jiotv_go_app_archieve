@@ -170,7 +170,7 @@ fun CloudMainScreen(
         val jioCrystalServer = CloudServer(
             name = "Jio Crystal",
             url = decodeUrl(JIO_CRYSTAL_URL_ENC),
-            logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
+            logo = "https://iili.io/f1zkPwP.md.png"
         )
         val fancodeServer = CloudServer(
             name = "Fancode Live",

@@ -302,7 +302,8 @@ fun CloudPlayerScreen(
             normalizedHeaders["User-Agent"] = jioUA
             normalizedHeaders["Origin"] = "https://www.jio.com"
             normalizedHeaders["Referer"] = "https://www.jio.com/"
-            normalizedHeaders["x-forwarded-for"] = "49.36.0.1" // Indian IP hint
+            normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
+            normalizedHeaders["x-forwarded-for"] = "49.36.0.1"
         }
 
         // >>> EXTRACTOR FOR TATA BING <<<
@@ -312,7 +313,8 @@ fun CloudPlayerScreen(
                     val request = okhttp3.Request.Builder()
                         .url(playbackUrl)
                         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36")
-                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+                        .header("Accept", "*/*")
+                        .header("Referer", "https://allinonereborn.online/tplay/")
                         .build()
                     val response = okHttpClient.newCall(request).execute()
                     val body = response.body?.string()
@@ -324,17 +326,19 @@ fun CloudPlayerScreen(
                 }
             }
             if (playBody != null) {
-                // Support multiple formats: mpd: "...", source: "...", url: "..."
-                val mpdMatch = Regex("""(?:mpd|source|url|link|file):\s*["']([^"']+)["']""").find(playBody)
-                val drmMatch = Regex("""(?:drm|key|license):\s*\{\s*["']?([^"'\s:]+)["']?:\s*["']([^"']+)["']""").find(playBody)
+                // Support multiple formats: mpd: "...", source: "...", url: "...", file: "..."
+                // Flexible regex to handle different quoting and spaces
+                val mpdMatch = Regex("""(?:mpd|source|url|link|file|src)\s*:\s*["']([^"']+)["']""").find(playBody)
+                val drmMatch = Regex("""(?:drm|key|license|clearkey)\s*:\s*\{\s*["']?([^"'\s:]+)["']?\s*:\s*["']([^"']+)["']""").find(playBody)
                 
                 if (mpdMatch != null) {
                     var parsedMpdUrl = mpdMatch.groupValues[1]
                     // Support both ?token=... and token: "..."
-                    val tokenMatch = Regex("""token:\s*["']([^"']+)["']""").find(playBody)
+                    val tokenMatch = Regex("""token\s*:\s*["']([^"']+)["']""").find(playBody)
                     if (tokenMatch != null) {
                         try {
-                            val tokenPart = tokenMatch.groupValues[1].substringAfter("?", tokenMatch.groupValues[1])
+                            val tokenValue = tokenMatch.groupValues[1]
+                            val tokenPart = if (tokenValue.contains("?")) tokenValue.substringAfter("?") else tokenValue
                             if (tokenPart.isNotEmpty()) {
                                 parsedMpdUrl = if (parsedMpdUrl.contains("?")) "$parsedMpdUrl&$tokenPart" else "$parsedMpdUrl?$tokenPart"
                             }
@@ -364,7 +368,10 @@ fun CloudPlayerScreen(
                         } catch(e: Exception) {}
                     }
                 } else {
-                    LogCollector.log("Extraction Failed: No MPD URL found in response body")
+                    LogCollector.log("Extraction Failed: No MPD URL found. Body length: ${playBody.length}")
+                    if (playBody.length < 500) {
+                        LogCollector.log("Body preview: ${playBody.take(200)}")
+                    }
                 }
             }
         }
@@ -395,6 +402,7 @@ fun CloudPlayerScreen(
                         normalized.contains("/play/") ||
                         normalized.contains("play.php") ||
                         normalized.contains("jio.com") ||
+                        normalized.contains("jio.dev") ||
                         (ch.type == "dash" && !normalized.contains(".m3u8"))
                 )
             lastAttemptWasDash = isDash
