@@ -303,6 +303,8 @@ fun CloudPlayerScreen(
             normalizedHeaders["Origin"] = "https://www.jio.com"
             normalizedHeaders["Referer"] = "https://www.jio.com/"
             normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
+            normalizedHeaders["Accept"] = "application/json, text/plain, */*"
+            normalizedHeaders["Accept-Language"] = "en-US,en;q=0.9"
             normalizedHeaders["x-forwarded-for"] = "49.36.0.1"
         }
 
@@ -312,7 +314,7 @@ fun CloudPlayerScreen(
                 try {
                     val request = okhttp3.Request.Builder()
                         .url(playbackUrl)
-                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36")
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                         .header("Accept", "*/*")
                         .header("Referer", "https://allinonereborn.online/tplay/")
                         .build()
@@ -326,25 +328,25 @@ fun CloudPlayerScreen(
                 }
             }
             if (playBody != null) {
-                // Support multiple formats: mpd: "...", source: "...", url: "...", file: "..."
-                // Flexible regex to handle different quoting and spaces
-                val mpdMatch = Regex("""(?:mpd|source|url|link|file|src)\s*:\s*["']([^"']+)["']""").find(playBody)
+                // Highly robust regex: look for any .mpd or .m3u8 URL anywhere in the body
+                val urlMatch = Regex("""https?://[^\s"'<>]+?\.(?:mpd|m3u8)(?:\?[^\s"'<>]+)?""").find(playBody)
                 val drmMatch = Regex("""(?:drm|key|license|clearkey)\s*:\s*\{\s*["']?([^"'\s:]+)["']?\s*:\s*["']([^"']+)["']""").find(playBody)
                 
-                if (mpdMatch != null) {
-                    var parsedMpdUrl = mpdMatch.groupValues[1]
-                    // Support both ?token=... and token: "..."
+                if (urlMatch != null) {
+                    var parsedUrl = urlMatch.value
+                    
+                    // Handle tokens if present in the body but not in the URL
                     val tokenMatch = Regex("""token\s*:\s*["']([^"']+)["']""").find(playBody)
-                    if (tokenMatch != null) {
+                    if (tokenMatch != null && !parsedUrl.contains("token=")) {
                         try {
                             val tokenValue = tokenMatch.groupValues[1]
                             val tokenPart = if (tokenValue.contains("?")) tokenValue.substringAfter("?") else tokenValue
                             if (tokenPart.isNotEmpty()) {
-                                parsedMpdUrl = if (parsedMpdUrl.contains("?")) "$parsedMpdUrl&$tokenPart" else "$parsedMpdUrl?$tokenPart"
+                                parsedUrl = if (parsedUrl.contains("?")) "$parsedUrl&$tokenPart" else "$parsedUrl?$tokenPart"
                             }
                         } catch(e:Exception){}
                     }
-                    playbackUrl = parsedMpdUrl
+                    playbackUrl = parsedUrl
                     LogCollector.log("Extracted Tata URL: $playbackUrl")
                     
                     if (drmMatch != null) {
@@ -368,9 +370,11 @@ fun CloudPlayerScreen(
                         } catch(e: Exception) {}
                     }
                 } else {
-                    LogCollector.log("Extraction Failed: No MPD URL found. Body length: ${playBody.length}")
-                    if (playBody.length < 500) {
-                        LogCollector.log("Body preview: ${playBody.take(200)}")
+                    LogCollector.log("Extraction Failed: No media URL found in body. Body length: ${playBody.length}")
+                    if (playBody.length < 1000) {
+                        LogCollector.log("Body: $playBody")
+                    } else {
+                        LogCollector.log("Body preview: ${playBody.take(500)}")
                     }
                 }
             }
