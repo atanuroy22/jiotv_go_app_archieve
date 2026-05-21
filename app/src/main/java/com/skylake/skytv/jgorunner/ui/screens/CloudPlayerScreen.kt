@@ -284,6 +284,21 @@ fun CloudPlayerScreen(
         var resolvedLicenseUrl = ch.licenseUrl
         var playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
 
+        val shouldUseWebView = playbackUrl.contains("tplay/play.php", true) || playbackUrl.contains("/tplay/play.php", true)
+        if (shouldUseWebView) {
+            try {
+                val intent = android.content.Intent(context, com.skylake.skytv.jgorunner.activities.WebPlayerActivity::class.java).apply {
+                    putExtra("startup_url", playbackUrl)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                LogCollector.log("Failed to open WebPlayerActivity: ${e.message}")
+            }
+            showChannelOverlay = true
+            overlayVisibilityTick = System.currentTimeMillis()
+            return@LaunchedEffect
+        }
+
         val alexJplusHost = resolvedLicenseUrl?.contains("alex4528.site", true) == true ||
             (ch.mpdUrl?.contains("alex4528.site", true) == true) ||
             (ch.m3u8Url?.contains("alex4528.site", true) == true)
@@ -380,21 +395,6 @@ fun CloudPlayerScreen(
                 }
             }
         }
-        // If the provider returns a play.php page, open it in the in-app WebView
-        // so the site's JavaScript can construct the real player URL (browser-only flows).
-        if (playbackUrl.contains("tplay/play.php", true) || playbackUrl.contains("/tplay/play.php", true)) {
-            try {
-                val intent = android.content.Intent(context, com.skylake.skytv.jgorunner.activities.WebPlayerActivity::class.java).apply {
-                    putExtra("startup_url", playbackUrl)
-                }
-                context.startActivity(intent)
-            } catch (e: Exception) {
-                LogCollector.log("Failed to open WebPlayerActivity: ${e.message}")
-            }
-            // Clear playbackUrl to avoid feeding HTML into ExoPlayer
-            playbackUrl = ""
-        }
-
         val isLocalPlayback = playbackUrl.contains("localhost", true) || playbackUrl.contains("127.0.0.1")
         val preferredPlaybackUrl =
             if (isLocalPlayback && !ch.m3u8Url.isNullOrBlank()) ch.m3u8Url ?: playbackUrl else playbackUrl
