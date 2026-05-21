@@ -274,8 +274,13 @@ fun CloudPlayerScreen(
             normalizedHeaders[key] = v
         }
 
-        if (!ch.userAgent.isNullOrBlank() && !normalizedHeaders.containsKey("User-Agent")) {
-            normalizedHeaders["User-Agent"] = ch.userAgent
+        val channelUserAgent = ch.userAgent?.trim().orEmpty()
+        val looksLikeRealUserAgent = channelUserAgent.contains("Mozilla", ignoreCase = true) ||
+            channelUserAgent.contains("JioTV", ignoreCase = true) ||
+            channelUserAgent.contains("AppleWebKit", ignoreCase = true) ||
+            channelUserAgent.contains("Chrome", ignoreCase = true)
+        if (looksLikeRealUserAgent && !normalizedHeaders.containsKey("User-Agent")) {
+            normalizedHeaders["User-Agent"] = channelUserAgent
         }
 
         playerError = null
@@ -288,7 +293,8 @@ fun CloudPlayerScreen(
         if (shouldUseWebView) {
             try {
                 val intent = android.content.Intent(context, com.skylake.skytv.jgorunner.activities.WebPlayerActivity::class.java).apply {
-                    putExtra("startup_url", playbackUrl)
+                    putExtra("startup_url", "https://allinonereborn.online/tplay/")
+                    putExtra("target_channel_id", ch.id ?: "")
                 }
                 context.startActivity(intent)
             } catch (e: Exception) {

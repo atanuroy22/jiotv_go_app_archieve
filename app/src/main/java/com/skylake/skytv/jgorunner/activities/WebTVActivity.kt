@@ -44,6 +44,7 @@ class WebPlayerActivity : ComponentActivity() {
     private var currentPlayId: String? = null
     private var currentLogoUrl: String? = null
     private var currentChannelName: String? = null
+    private var targetChannelId: String? = null
 
     private val recentChannels: MutableList<Channel> = ArrayList()
 
@@ -85,6 +86,7 @@ class WebPlayerActivity : ComponentActivity() {
         ) + extraFilterUrl
 
         val startupUrl = intent?.getStringExtra("startup_url")?.trim().orEmpty()
+        targetChannelId = intent?.getStringExtra("target_channel_id")?.trim().orEmpty()?.takeIf { it.isNotBlank() }
         val resolvedStartupUrl = if (startupUrl.isNotEmpty()) {
             if (startupUrl.startsWith("http://", ignoreCase = true) || startupUrl.startsWith("https://", ignoreCase = true)) {
                 startupUrl
@@ -672,6 +674,28 @@ class WebPlayerActivity : ComponentActivity() {
                     """.trimIndent(),
                     null
                 )
+            } else if (url.contains("/tplay/", ignoreCase = true) && !targetChannelId.isNullOrBlank()) {
+                val channelId = targetChannelId.orEmpty()
+                view.postDelayed({
+                    view.evaluateJavascript(
+                        """
+                        (function() {
+                            try {
+                                window.open = function(u) { window.location.href = u; return null; };
+                                var card = document.querySelector('.channel-card[data-id="$channelId"]');
+                                if (card) {
+                                    card.click();
+                                    return 'clicked';
+                                }
+                                return 'missing';
+                            } catch (e) {
+                                return 'error';
+                            }
+                        })();
+                        """.trimIndent(),
+                        null
+                    )
+                }, 700)
             } else {
                 moveSearchInput(view)
                 extractChannelNumbers()
