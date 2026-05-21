@@ -321,8 +321,10 @@ class WebPlayerActivity : ComponentActivity() {
                 isUserGesture: Boolean,
                 resultMsg: android.os.Message?
             ): Boolean {
-                Log.d(TAG, "Blocked popup window request")
-                return false
+                val transport = resultMsg?.obj as? WebView.WebViewTransport
+                transport?.webView = view
+                resultMsg?.sendToTarget()
+                return true
             }
 
             override fun onPermissionRequest(request: PermissionRequest?) {
@@ -363,7 +365,8 @@ class WebPlayerActivity : ComponentActivity() {
         webSettings.defaultTextEncodingName = "utf-8"
         webSettings.mixedContentMode = 0
         webSettings.mediaPlaybackRequiresUserGesture = false // Allow autoplay
-        webSettings.javaScriptCanOpenWindowsAutomatically = false
+        webSettings.javaScriptCanOpenWindowsAutomatically = true
+        webSettings.setSupportMultipleWindows(true)
 
         // Ensure hardware accelerated rendering path is used for video/DRM playback.
         webView!!.setLayerType(View.LAYER_TYPE_HARDWARE, null)
@@ -446,7 +449,8 @@ class WebPlayerActivity : ComponentActivity() {
         if (currentUrl.isNullOrBlank()) return false
         return currentUrl.contains("/player/") ||
                 currentUrl.contains("/mpd/", ignoreCase = true) ||
-                currentUrl.contains(".mpd", ignoreCase = true)
+                currentUrl.contains(".mpd", ignoreCase = true) ||
+                currentUrl.contains("/pind", ignoreCase = true)
     }
 
     private fun forwardDpadToWebView(event: KeyEvent): Boolean {
@@ -549,6 +553,8 @@ class WebPlayerActivity : ComponentActivity() {
                 url.contains("localhost", ignoreCase = true) ||
                     url.contains("allinonereborn.online/tplay/", ignoreCase = true) ||
                     url.contains("mini.allinonereborn.fun/tplay/", ignoreCase = true) ||
+                    url.contains("jtvxweb.pages.dev", ignoreCase = true) ||
+                    url.contains("/pind", ignoreCase = true) ||
                     url.contains("/player/", ignoreCase = true) ||
                     url.contains("/mpd/", ignoreCase = true) ||
                     url.contains(".mpd", ignoreCase = true) ||
@@ -630,6 +636,19 @@ class WebPlayerActivity : ComponentActivity() {
                 )
             } else if (url.contains("/tplay/", ignoreCase = true) && !targetChannelId.isNullOrBlank()) {
                 val channelId = targetChannelId.orEmpty()
+                
+                // Hide the list immediately
+                view.evaluateJavascript(
+                    """
+                    (function() {
+                        var style = document.createElement('style');
+                        style.innerHTML = 'body { background: black !important; } .container, .grid, .channel-card, header, footer { display: none !important; }';
+                        document.head.appendChild(style);
+                    })();
+                    """.trimIndent(),
+                    null
+                )
+
                 view.postDelayed({
                     view.evaluateJavascript(
                         """
@@ -649,7 +668,27 @@ class WebPlayerActivity : ComponentActivity() {
                         """.trimIndent(),
                         null
                     )
-                }, 700)
+                }, 500)
+            } else if (url.contains("jio", ignoreCase = true) || url.contains("jtvxweb", ignoreCase = true)) {
+                 // Auto-click "Only India Stream" button for Jio
+                 view.evaluateJavascript(
+                    """
+                    (function() {
+                        try {
+                            var checkInterval = setInterval(function() {
+                                var buttons = Array.from(document.querySelectorAll('button, .btn, [role="button"]'));
+                                var indiaButton = buttons.find(b => b.textContent.toLowerCase().includes('only india'));
+                                if (indiaButton) {
+                                    indiaButton.click();
+                                    clearInterval(checkInterval);
+                                }
+                            }, 500);
+                            setTimeout(() => clearInterval(checkInterval), 10000);
+                        } catch (e) {}
+                    })();
+                    """.trimIndent(),
+                    null
+                 )
             } else {
                 moveSearchInput(view)
                 extractChannelNumbers()
@@ -662,20 +701,32 @@ class WebPlayerActivity : ComponentActivity() {
                 """
                 (function() {
                     try {
-                        var videos = document.querySelectorAll('video');
-                        videos.forEach(function(v) {
-                            v.muted = false;
-                            v.volume = 1.0;
-                            v.removeAttribute('muted');
-                        });
-                        var buttons = Array.from(document.querySelectorAll('button,[role="button"],i,svg'));
-                        buttons.forEach(function(el) {
-                            var text = (el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title'))) || '';
-                            text = String(text).toLowerCase();
-                            if (text.indexOf('mute') >= 0 || text.indexOf('unmute') >= 0 || text.indexOf('volume') >= 0) {
-                                try { el.click(); } catch (e) {}
-                            }
-                        });
+                        function doUnmute() {
+                            var videos = document.querySelectorAll('video');
+                            videos.forEach(function(v) {
+                                v.muted = false;
+                                v.volume = 1.0;
+                                v.removeAttribute('muted');
+                                if (v.paused && v.readyState >= 2) {
+                                    try { v.play(); } catch(e) {}
+                                }
+                            });
+                            var buttons = Array.from(document.querySelectorAll('button,[role="button"],i,svg,a,span'));
+                            buttons.forEach(function(el) {
+                                var text = (el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title'))) || el.innerText || '';
+                                text = String(text).toLowerCase();
+                                if (text.indexOf('mute') >= 0 || text.indexOf('unmute') >= 0 || text.indexOf('volume') >= 0 || text.indexOf('sound') >= 0) {
+                                    try { el.click(); } catch (e) {}
+                                }
+                            });
+                        }
+                        
+                        doUnmute();
+                        // Repeat a few times as some players initialize late
+                        setTimeout(doUnmute, 1000);
+                        setTimeout(doUnmute, 2500);
+                        setTimeout(doUnmute, 5000);
+                        
                         return 'ok';
                     } catch (e) {
                         return 'error';

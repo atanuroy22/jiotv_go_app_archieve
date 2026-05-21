@@ -306,6 +306,8 @@ fun CloudPlayerScreen(
                     putExtra("target_channel_id", ch.id ?: "")
                 }
                 context.startActivity(intent)
+                // Finish the current player activity so back goes directly to list
+                (context as? Activity)?.finish()
             } catch (e: Exception) {
                 LogCollector.log("Failed to open WebPlayerActivity for Tata Play: ${e.message}")
             }
@@ -319,6 +321,8 @@ fun CloudPlayerScreen(
                     putExtra("startup_url", playbackUrl)
                 }
                 context.startActivity(intent)
+                // Finish the current player activity so back goes directly to list
+                (context as? Activity)?.finish()
             } catch (e: Exception) {
                 LogCollector.log("Failed to open WebPlayerActivity for Jio: ${e.message}")
             }
