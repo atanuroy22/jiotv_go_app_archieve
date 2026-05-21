@@ -149,6 +149,8 @@ fun Main_Layout_3rd(context: Context, reloadTrigger: Int) {
 
                 val availableCategories =
                     listOf("All") + allChannels.mapNotNull { it.category }.distinct()
+                val availableCountries =
+                    listOf("All") + allChannels.mapNotNull { it.country?.uppercase() }.distinct()
                 val savedCategory = preferenceManager.myPrefs.lastSelectedCategoryExp
 
                 selectedCategory = when {
@@ -160,6 +162,22 @@ fun Main_Layout_3rd(context: Context, reloadTrigger: Int) {
                 selectedCategories2 = preferenceManager.myPrefs.lastSelectedCategoriesExp?.let {
                     Gson().fromJson(it, object : TypeToken<List<String>>() {}.type)
                 } ?: listOf("All")
+
+                val looksLikeJioCrystalSet = allChannels.any {
+                    it.name.contains("jio", ignoreCase = true) ||
+                        it.name.contains("crystal", ignoreCase = true)
+                }
+                val countriesPreference = preferenceManager.myPrefs.lastSelectedCountriesExp?.let {
+                    Gson().fromJson(it, object : TypeToken<List<String>>() {}.type)
+                } ?: listOf("All")
+                if ((countriesPreference.isEmpty() || countriesPreference.contains("All")) &&
+                    availableCountries.contains("IN") &&
+                    looksLikeJioCrystalSet
+                ) {
+                    selectedCountries = listOf("IN")
+                    preferenceManager.myPrefs.lastSelectedCountriesExp = Gson().toJson(selectedCountries)
+                    preferenceManager.savePreferences()
+                }
 
             } else {
                 Log.d("TVChannelsScreen", "Channel list JSON is empty.")

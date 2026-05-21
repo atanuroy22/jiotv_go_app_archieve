@@ -545,15 +545,17 @@ class WebPlayerActivity : ComponentActivity() {
     private inner class CustomWebViewClient : WebViewClient() {
         @Deprecated("Deprecated in Java")
         override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
-            val isAllowedHost = url.contains("localhost", ignoreCase = true) ||
-                url.contains("allinonereborn.online", ignoreCase = true) ||
-                url.contains("mini.allinonereborn.fun", ignoreCase = true)
-            val isPlayerLikeUrl = url.contains("/player/", ignoreCase = true) ||
-                url.contains("/mpd/", ignoreCase = true) ||
-                url.contains(".mpd", ignoreCase = true)
+            val isAllowedRoute =
+                url.contains("localhost", ignoreCase = true) ||
+                    url.contains("allinonereborn.online/tplay/", ignoreCase = true) ||
+                    url.contains("mini.allinonereborn.fun/tplay/", ignoreCase = true) ||
+                    url.contains("/player/", ignoreCase = true) ||
+                    url.contains("/mpd/", ignoreCase = true) ||
+                    url.contains(".mpd", ignoreCase = true) ||
+                    url.contains("/play/", ignoreCase = true)
 
-            if (!isAllowedHost && !isPlayerLikeUrl && !url.contains("/tplay/", ignoreCase = true)) {
-            Log.d(TAG, "Blocked non-player navigation: $url")
+            if (!isAllowedRoute) {
+                Log.d(TAG, "Blocked non-player navigation: $url")
             return true
             }
 
@@ -585,89 +587,8 @@ class WebPlayerActivity : ComponentActivity() {
 
             // Keep Tata Play /play/ URLs inside the WebView browser flow.
             if (url.contains("/play/")) {
-                if (url.contains("allinonereborn.online", ignoreCase = true) ||
-                    url.contains("mini.allinonereborn.fun", ignoreCase = true) ||
-                    !targetChannelId.isNullOrBlank()
-                ) {
-                    initURL = webView!!.url
-                    Log.d(TAG, "Keeping Tata /play/ route in WebView: $url")
-                    return false
-                }
-
                 initURL = webView!!.url
-                Log.d(TAG, "Saving initURL: $initURL")
-
-                // Extract the play ID from the URL
-                val playId = if (url.matches(".*/play/([^/]+).*".toRegex())) url.replace(
-                    ".*/play/([^/]+).*".toRegex(),
-                    "$1"
-                ) else null
-
-                Log.d("WB", playId ?: "Play ID not found")
-
-                // Use JavaScript to extract the channel logo and name
-                view.evaluateJavascript(
-                    "(function() { " +
-                            "try { " +
-                            "    var channelCard = document.querySelector('a[href*=\"/play/" + playId + "\"]'); " +
-                            "    if (channelCard) { " +
-                            "        var logoElement = channelCard.querySelector('img'); " +
-                            "        var nameElement = channelCard.querySelector('span'); " +
-                            "        var logoUrl = logoElement ? logoElement.getAttribute('src') : null; " +
-                            "        var channelName = nameElement ? nameElement.innerText : null; " +
-                            "        return JSON.stringify({playId: '" + playId + "', logoUrl: logoUrl, channelName: channelName}); " +
-                            "    } else { " +
-                            "        return null; " +
-                            "    } " +
-                            "} catch (error) { " +
-                            "    return null; " +
-                            "} " +
-                            "})();"
-                ) { result: String? ->
-                    if (result != null && result != "null") {
-                        try {
-                            // Remove any extra quotes surrounding the JSON result
-                            val jsonString =
-                                result.replace("^\"|\"$".toRegex(), "").replace("\\\"", "\"")
-                            val jsonResult = JSONObject(jsonString)
-                            currentPlayId = jsonResult.getString("playId")
-                            currentLogoUrl = jsonResult.getString("logoUrl")
-                            currentChannelName = jsonResult.getString("channelName")
-
-                            Log.d(
-                                TAG,
-                                "Channel Clicked: $currentChannelName (Play ID: $currentPlayId)"
-                            )
-                            saveRecentChannel(currentPlayId, currentLogoUrl, currentChannelName)
-                        } catch (e: JSONException) {
-                            Log.d(
-                                TAG,
-                                "JSON parsing error: " + e.message
-                            )
-                        }
-                    } else {
-                        Log.d(
-                            TAG,
-                            "No channel data extracted."
-                        )
-                    }
-                }
-
-                // Construct the HLS URL only for non-DRM route.
-                var modifiedUrl = url.replace("/play/", "/live/") + ".m3u8"
-                modifiedUrl = modifiedUrl.replace("//.m3u8", ".m3u8")
-
-                Log.d("DIX", "Modified URL for intent: $modifiedUrl")
-
-                val intent = Intent(this@WebPlayerActivity, ExoplayerActivity::class.java).apply {
-                    putExtra("video_url", modifiedUrl)
-                    putExtra("current_play_id", playId?.substringBefore("?") ?: playId)
-                    putExtra("channels_list", channelNumbers?.toTypedArray())
-                }
-                startActivity(intent)
-                return true
-            } else if (!url.contains("/play/") && !url.contains("/player/")) {
-                initURL = url
+                Log.d(TAG, "Keeping browser flow in WebView: $url")
                 return false
             }
             return false
@@ -690,6 +611,7 @@ class WebPlayerActivity : ComponentActivity() {
                 Log.d(TAG, "Playing: $url")
                 setupFullScreenMode()
                 centerPlayerInWebUi(view)
+                forceUnmutePlayer(view)
                 view.requestFocus(View.FOCUS_DOWN)
                 view.evaluateJavascript(
                     """
@@ -733,6 +655,35 @@ class WebPlayerActivity : ComponentActivity() {
                 extractChannelNumbers()
                 loadRecentChannels()
             }
+        }
+
+        private fun forceUnmutePlayer(view: WebView) {
+            view.evaluateJavascript(
+                """
+                (function() {
+                    try {
+                        var videos = document.querySelectorAll('video');
+                        videos.forEach(function(v) {
+                            v.muted = false;
+                            v.volume = 1.0;
+                            v.removeAttribute('muted');
+                        });
+                        var buttons = Array.from(document.querySelectorAll('button,[role="button"],i,svg'));
+                        buttons.forEach(function(el) {
+                            var text = (el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title'))) || '';
+                            text = String(text).toLowerCase();
+                            if (text.indexOf('mute') >= 0 || text.indexOf('unmute') >= 0 || text.indexOf('volume') >= 0) {
+                                try { el.click(); } catch (e) {}
+                            }
+                        });
+                        return 'ok';
+                    } catch (e) {
+                        return 'error';
+                    }
+                })();
+                """.trimIndent(),
+                null
+            )
         }
 
         fun centerPlayerInWebUi(view: WebView) {
