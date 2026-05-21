@@ -299,13 +299,12 @@ fun CloudPlayerScreen(
         // >>> JIO HEADERS FIX <<<
         if (playbackUrl.contains("jio.com", true) || playbackUrl.contains("jio.dev", true)) {
             val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
-            normalizedHeaders["User-Agent"] = jioUA
-            normalizedHeaders["Origin"] = "https://www.jio.com"
-            normalizedHeaders["Referer"] = "https://www.jio.com/"
-            normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
-            normalizedHeaders["Accept"] = "application/json, text/plain, */*"
-            normalizedHeaders["Accept-Language"] = "en-US,en;q=0.9"
-            normalizedHeaders["x-forwarded-for"] = "49.36.0.1"
+            if (!normalizedHeaders.keys.any { it.equals("User-Agent", true) }) normalizedHeaders["User-Agent"] = jioUA
+            if (!normalizedHeaders.keys.any { it.equals("Origin", true) }) normalizedHeaders["Origin"] = "https://www.jio.com"
+            if (!normalizedHeaders.keys.any { it.equals("Referer", true) }) normalizedHeaders["Referer"] = "https://www.jio.com/"
+            if (!normalizedHeaders.keys.any { it.equals("X-Requested-With", true) }) normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
+            if (!normalizedHeaders.keys.any { it.equals("Accept", true) }) normalizedHeaders["Accept"] = "application/json, text/plain, */*"
+            if (!normalizedHeaders.keys.any { it.equals("Accept-Language", true) }) normalizedHeaders["Accept-Language"] = "en-US,en;q=0.9"
         }
 
         // >>> EXTRACTOR FOR TATA BING <<<
@@ -376,9 +375,26 @@ fun CloudPlayerScreen(
                     } else {
                         LogCollector.log("Body preview: ${playBody.take(500)}")
                     }
+                    playbackUrl = "" // Avoid ExoPlayer parsing HTML
+                    playerError = "Stream provider changed link or requires redirect. Non-playable content received."
                 }
             }
         }
+        // If the provider returns a play.php page, open it in the in-app WebView
+        // so the site's JavaScript can construct the real player URL (browser-only flows).
+        if (playbackUrl.contains("tplay/play.php", true) || playbackUrl.contains("/tplay/play.php", true)) {
+            try {
+                val intent = android.content.Intent(context, com.skylake.skytv.jgorunner.activities.WebPlayerActivity::class.java).apply {
+                    putExtra("startup_url", playbackUrl)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                LogCollector.log("Failed to open WebPlayerActivity: ${e.message}")
+            }
+            // Clear playbackUrl to avoid feeding HTML into ExoPlayer
+            playbackUrl = ""
+        }
+
         val isLocalPlayback = playbackUrl.contains("localhost", true) || playbackUrl.contains("127.0.0.1")
         val preferredPlaybackUrl =
             if (isLocalPlayback && !ch.m3u8Url.isNullOrBlank()) ch.m3u8Url ?: playbackUrl else playbackUrl
