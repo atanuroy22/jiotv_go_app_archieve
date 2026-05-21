@@ -360,6 +360,7 @@ class WebPlayerActivity : ComponentActivity() {
         val webSettings = webView!!.settings
         webSettings.javaScriptEnabled = true
         webSettings.domStorageEnabled = true
+        webSettings.databaseEnabled = true
         webSettings.loadWithOverviewMode = true
         webSettings.useWideViewPort = true
         webSettings.defaultTextEncodingName = "utf-8"
@@ -367,6 +368,13 @@ class WebPlayerActivity : ComponentActivity() {
         webSettings.mediaPlaybackRequiresUserGesture = false // Allow autoplay
         webSettings.javaScriptCanOpenWindowsAutomatically = true
         webSettings.setSupportMultipleWindows(true)
+        
+        // Set a high-compatibility mobile User-Agent for Jio and Tata
+        val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
+        webSettings.userAgentString = jioUA
+        
+        // Disable cache for testing if needed, but usually good to keep
+        // webSettings.cacheMode = WebSettings.LOAD_NO_CACHE
 
         // Ensure hardware accelerated rendering path is used for video/DRM playback.
         webView!!.setLayerType(View.LAYER_TYPE_HARDWARE, null)
@@ -637,13 +645,37 @@ class WebPlayerActivity : ComponentActivity() {
             } else if (url.contains("/tplay/", ignoreCase = true) && !targetChannelId.isNullOrBlank()) {
                 val channelId = targetChannelId.orEmpty()
                 
-                // Hide the list immediately
+                // Hide the list immediately and all surrounding UI
                 view.evaluateJavascript(
                     """
                     (function() {
-                        var style = document.createElement('style');
-                        style.innerHTML = 'body { background: black !important; } .container, .grid, .channel-card, header, footer { display: none !important; }';
-                        document.head.appendChild(style);
+                        var css = `
+                            body { background: black !important; color: transparent !important; }
+                            .container, .grid, .channel-card, header, footer, 
+                            nav, .navbar, .header, .top-bar, .search-container, 
+                            .search-bar, #search-input, .logo-container, 
+                            .hd-channels-btn, .filter-container, .category-bar,
+                            [class*="header"], [class*="search"], [class*="nav"] { 
+                                display: none !important; 
+                                opacity: 0 !important; 
+                                visibility: hidden !important; 
+                                height: 0 !important;
+                                pointer-events: none !important;
+                            }
+                        `;
+                        function applyHide() {
+                            var style = document.getElementById('hide-tplay-ui');
+                            if (!style) {
+                                style = document.createElement('style');
+                                style.id = 'hide-tplay-ui';
+                                document.head.appendChild(style);
+                            }
+                            style.innerHTML = css;
+                        }
+                        applyHide();
+                        // Repeat a few times to ensure it sticks
+                        var interval = setInterval(applyHide, 500);
+                        setTimeout(() => clearInterval(interval), 5000);
                     })();
                     """.trimIndent(),
                     null
@@ -703,6 +735,7 @@ class WebPlayerActivity : ComponentActivity() {
                     try {
                         function doUnmute() {
                             var videos = document.querySelectorAll('video');
+                            var unmutedAny = false;
                             videos.forEach(function(v) {
                                 v.muted = false;
                                 v.volume = 1.0;
@@ -710,22 +743,46 @@ class WebPlayerActivity : ComponentActivity() {
                                 if (v.paused && v.readyState >= 2) {
                                     try { v.play(); } catch(e) {}
                                 }
+                                if (v.paused) {
+                                    try { v.click(); } catch(e) {}
+                                }
+                                if (!v.muted) unmutedAny = true;
                             });
+                            
                             var buttons = Array.from(document.querySelectorAll('button,[role="button"],i,svg,a,span'));
                             buttons.forEach(function(el) {
                                 var text = (el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('title'))) || el.innerText || '';
                                 text = String(text).toLowerCase();
                                 if (text.indexOf('mute') >= 0 || text.indexOf('unmute') >= 0 || text.indexOf('volume') >= 0 || text.indexOf('sound') >= 0) {
-                                    try { el.click(); } catch (e) {}
+                                    try { 
+                                        el.click(); 
+                                        unmutedAny = true;
+                                    } catch (e) {}
                                 }
                             });
+                            
+                            // If still muted or no video found, try a generic click on the player container
+                            if (!unmutedAny) {
+                                var player = document.querySelector('.shaka-video-container') || document.querySelector('#player') || document.body;
+                                if (player) {
+                                    try {
+                                        var clickEvent = new MouseEvent('click', {
+                                            view: window,
+                                            bubbles: true,
+                                            cancelable: true
+                                        });
+                                        player.dispatchEvent(clickEvent);
+                                    } catch(e) {}
+                                }
+                            }
                         }
                         
                         doUnmute();
-                        // Repeat a few times as some players initialize late
-                        setTimeout(doUnmute, 1000);
-                        setTimeout(doUnmute, 2500);
-                        setTimeout(doUnmute, 5000);
+                        // Repeat more frequently at first, then less often
+                        setTimeout(doUnmute, 500);
+                        setTimeout(doUnmute, 1500);
+                        setTimeout(doUnmute, 3000);
+                        setTimeout(doUnmute, 6000);
                         
                         return 'ok';
                     } catch (e) {
