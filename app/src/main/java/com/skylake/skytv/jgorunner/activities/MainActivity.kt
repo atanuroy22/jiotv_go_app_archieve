@@ -254,11 +254,16 @@ class MainActivity : ComponentActivity() {
                                 initialServer = selectedServer,
                                 onNavigate = { currentScreen = it },
                                 onPlayChannel = { channel, list ->
-                                    val intent = Intent(this@MainActivity, CloudPlayerActivity::class.java).apply {
-                                        putExtra("current_cloud_channel_index", list.indexOf(channel))
-                                        putExtra("server_url", selectedServer?.url)
+                                    if (selectedServer?.name?.contains("Crystal", ignoreCase = true) == true) {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://jtvxweb.pages.dev/pind?id=${channel.id}"))
+                                        startActivity(intent)
+                                    } else {
+                                        val intent = Intent(this@MainActivity, CloudPlayerActivity::class.java).apply {
+                                            putExtra("current_cloud_channel_index", list.indexOf(channel))
+                                            putExtra("server_url", selectedServer?.url)
+                                        }
+                                        startActivity(intent)
                                     }
-                                    startActivity(intent)
                                 }
                             )
                             "JioHome" -> HomeScreen(

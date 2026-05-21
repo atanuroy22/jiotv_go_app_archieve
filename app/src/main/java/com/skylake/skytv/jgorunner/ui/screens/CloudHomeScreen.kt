@@ -153,7 +153,7 @@ fun CloudHomeScreen(
                         server.name.contains("sd", ignoreCase = true)
                     val isTataBing = server.name.contains("tata bing", ignoreCase = true)
                     val isCrystal = server.name.contains("crystal", ignoreCase = true)
-                    !(isJio || isSonyIn || isFancode || isZeeSd || isTataBing || isCrystal) || (isSlow && !isJio)
+                    !(isJio || isSonyIn || isFancode || isZeeSd || isTataBing) || (isSlow && !isJio) || isCrystal
                 }
                 .map { it.url }
                 .toMutableList()
