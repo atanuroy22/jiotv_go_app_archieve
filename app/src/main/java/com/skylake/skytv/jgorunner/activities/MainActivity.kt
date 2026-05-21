@@ -254,9 +254,18 @@ class MainActivity : ComponentActivity() {
                                 initialServer = selectedServer,
                                 onNavigate = { currentScreen = it },
                                 onPlayChannel = { channel, list ->
-                                    if (selectedServer?.name?.contains("Crystal", ignoreCase = true) == true) {
+                                    val isCrystal = selectedServer?.name?.contains("Crystal", ignoreCase = true) == true
+                                    val isTataBing = selectedServer?.name?.contains("Tata Bing", ignoreCase = true) == true
+
+                                    if (isCrystal) {
                                         val intent = Intent(this@MainActivity, WebPlayerActivity::class.java).apply {
                                             putExtra("startup_url", "https://jtvxweb.pages.dev/pind?id=${channel.id}")
+                                        }
+                                        startActivity(intent)
+                                    } else if (isTataBing) {
+                                        val intent = Intent(this@MainActivity, WebPlayerActivity::class.java).apply {
+                                            putExtra("startup_url", "https://allinonereborn.online/tplay/")
+                                            putExtra("target_channel_id", channel.id ?: "")
                                         }
                                         startActivity(intent)
                                     } else {

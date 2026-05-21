@@ -312,7 +312,8 @@ fun CloudPlayerScreen(
             }
         }
 
-        val shouldUseWebView = playbackUrl.contains("tplay/play.php", true) || playbackUrl.contains("/tplay/play.php", true)
+        val shouldUseWebView = playbackUrl.contains("tplay/play.php", true) || playbackUrl.contains("/tplay/play.php", true) || 
+                               serverUrl?.contains("tplay/channels.json", ignoreCase = true) == true
         if (shouldUseWebView) {
             try {
                 val intent = Intent(context, com.skylake.skytv.jgorunner.activities.WebPlayerActivity::class.java).apply {
@@ -324,21 +325,6 @@ fun CloudPlayerScreen(
                 (context as? Activity)?.finish()
             } catch (e: Exception) {
                 LogCollector.log("Failed to open WebPlayerActivity for Tata Play: ${e.message}")
-            }
-            return@LaunchedEffect
-        }
-
-        val shouldUseBrowserPlayer = playbackUrl.contains("jio.com", true) || playbackUrl.contains("jio.dev", true)
-        if (shouldUseBrowserPlayer) {
-            try {
-                val intent = Intent(context, com.skylake.skytv.jgorunner.activities.WebPlayerActivity::class.java).apply {
-                    putExtra("startup_url", playbackUrl)
-                }
-                context.startActivity(intent)
-                // Finish the current player activity so back goes directly to list
-                (context as? Activity)?.finish()
-            } catch (e: Exception) {
-                LogCollector.log("Failed to open WebPlayerActivity for Jio: ${e.message}")
             }
             return@LaunchedEffect
         }
