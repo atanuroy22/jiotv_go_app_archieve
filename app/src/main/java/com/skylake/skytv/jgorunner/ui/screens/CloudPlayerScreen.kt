@@ -314,12 +314,6 @@ fun CloudPlayerScreen(
             return@LaunchedEffect
         }
 
-        // Fix Jio Crystal URLs - transform jiotvmblive URLs to jtvxweb.pages.dev/pind format
-        if (playbackUrl.contains("jiotvmblive.cdn.jio.com", true) && !ch.id.isNullOrBlank()) {
-            playbackUrl = "https://jtvxweb.pages.dev/pind?id=${ch.id}"
-            LogCollector.log("Transformed Jio Crystal URL to: $playbackUrl")
-        }
-
         val shouldUseBrowserPlayer = playbackUrl.contains("jio.com", true) || playbackUrl.contains("jio.dev", true)
         if (shouldUseBrowserPlayer) {
             try {

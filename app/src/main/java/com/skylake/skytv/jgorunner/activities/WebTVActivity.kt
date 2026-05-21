@@ -655,10 +655,7 @@ class WebPlayerActivity : ComponentActivity() {
                             nav, .navbar, .header, .top-bar, .search-container, 
                             .search-bar, #search-input, .logo-container, 
                             .hd-channels-btn, .filter-container, .category-bar,
-                            .category-dropdown, .category-select, .category-filter,
-                            .dropdown, .select, .filter, .category-menu,
-                            [class*="header"], [class*="search"], [class*="nav"],
-                            [class*="category"], [class*="dropdown"], [class*="filter"] { 
+                            [class*="header"], [class*="search"], [class*="nav"] { 
                                 display: none !important; 
                                 opacity: 0 !important; 
                                 visibility: hidden !important; 
