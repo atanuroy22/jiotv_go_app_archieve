@@ -385,7 +385,7 @@ fun CloudHomeScreen(
                         val scale = animateFloatAsState(if (offerPulse) 1.15f else 1.0f)
                         Box(modifier = Modifier.fillMaxWidth()) {
                             // Make the left area clickable so users notice the offer even if text is long
-                            Row(modifier = Modifier.weight(1f).clickable { showOfferDialog = true }.focusable(), verticalAlignment = Alignment.CenterVertically) {
+                            Row(modifier = Modifier.fillMaxWidth().clickable { showOfferDialog = true }.focusable(), verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = expiryText,
                                     color = Color.Yellow,
