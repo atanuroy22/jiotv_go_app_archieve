@@ -89,6 +89,7 @@ fun CloudHomeScreen(
     var showSettingsPanel by remember { mutableStateOf(false) }
     var showHiddenServersDialog by remember { mutableStateOf(false) }
     var showAutoopenServerDialog by remember { mutableStateOf(false) }
+    var showOfferDialog by remember { mutableStateOf(false) }
 
     var refreshTrigger by remember { mutableIntStateOf(0) }
 
@@ -125,6 +126,21 @@ fun CloudHomeScreen(
             preferenceManager.savePreferences()
             refreshTrigger++
             Toast.makeText(context, "Access key removed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Small pulsing indicator for the offer arrow when unsubscribed
+    var offerPulse by remember { mutableStateOf(false) }
+    LaunchedEffect(isSubscribed) {
+        if (!isSubscribed) {
+            while (true) {
+                offerPulse = true
+                delay(650)
+                offerPulse = false
+                delay(650)
+            }
+        } else {
+            offerPulse = false
         }
     }
 
@@ -355,11 +371,39 @@ fun CloudHomeScreen(
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = expiryText,
-                        color = if (isSubscribed) Color.Green else Color.Yellow,
-                        fontSize = 11.sp
-                    )
+                    if (isSubscribed) {
+                        Text(
+                            text = expiryText,
+                            color = Color.Green,
+                            fontSize = 11.sp
+                        )
+                    } else {
+                        val scale = animateFloatAsState(if (offerPulse) 1.15f else 1.0f)
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            // Make the left area clickable so users notice the offer even if text is long
+                            Row(modifier = Modifier.weight(1f).clickable { showOfferDialog = true }.focusable(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = expiryText,
+                                    color = Color.Yellow,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                // Small label to attract attention
+                                Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFF0F1720)) {
+                                    Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.LocalOffer, contentDescription = null, tint = Color.Cyan, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Offers", color = Color.Cyan, fontSize = 11.sp)
+                                    }
+                                }
+                            }
+
+                            IconButton(onClick = { showOfferDialog = true }, modifier = Modifier.scale(scale.value)) {
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Show offers", tint = Color.Cyan)
+                            }
+                        }
+                    }
                     val autoopenName = allServers.firstOrNull { it.url == autoopenServerUrl }?.name ?: servers.firstOrNull()?.name ?: ""
                     val hiddenCount = hiddenServerUrls.size
                     Text(
@@ -597,6 +641,58 @@ fun CloudHomeScreen(
                 showAutoopenServerDialog = false
             }
         )
+    }
+
+    // Bottom anchored offer panel (expandable) — appears inline, focusable for D-pad navigation
+    val offerFocusRequester = remember { FocusRequester() }
+    if (showOfferDialog) {
+        Box(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(8.dp).focusRequester(offerFocusRequester).focusable(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212))
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Special Offer — Jio+ & Sports", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Includes: JioTV+, Sony, Zee, Sports, Tata Play", color = Color.White)
+                    Spacer(Modifier.height(6.dp))
+                    Text("• 1 week — ₹10", color = Color.White)
+                    Text("• 1 month — ₹40", color = Color.White)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Note: This offer provides all those access with less price, so don't compare with the original app features and stability. For premium features (Sony, Tata Play, Jio+, Zee5) please uninstall this app and buy subscription from the original providers.",
+                        color = Color.Gray,
+                        fontSize = 9.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row {
+                        TextButton(onClick = {
+                            try {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("UPI", "atanukrroy15-1@okicici")
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "UPI copied", Toast.LENGTH_SHORT).show()
+                            } catch (_: Exception) {}
+                        }) { Text("Copy UPI", color = Color.Cyan) }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        TextButton(onClick = {
+                            try {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/atanu_roy"))
+                                context.startActivity(intent)
+                            } catch (_: Exception) {}
+                        }) { Text("Open Telegram", color = Color.Cyan) }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        TextButton(onClick = { showOfferDialog = false }) { Text("Close") }
+                    }
+                }
+            }
+        }
+
+        LaunchedEffect(showOfferDialog) {
+            if (showOfferDialog) {
+                try { offerFocusRequester.requestFocus() } catch (_: Exception) {}
+            }
+        }
     }
 
 }
