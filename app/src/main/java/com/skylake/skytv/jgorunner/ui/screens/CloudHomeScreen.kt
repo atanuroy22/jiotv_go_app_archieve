@@ -107,9 +107,26 @@ fun CloudHomeScreen(
     var autoopenServerUrl by remember { mutableStateOf(preferenceManager.myPrefs.cloudAutoplayServerUrl) }
     var autoopenDelaySeconds by remember { mutableIntStateOf(preferenceManager.myPrefs.cloudAutoplayDelaySeconds) }
     var showAutoopenDelayMenu by remember { mutableStateOf(false) }
+    val storedAccessKey = preferenceManager.myPrefs.cloudAccessKey?.trim().orEmpty()
 
     val focusRequester = remember { FocusRequester() }
     val serverFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
+
+    LaunchedEffect(Unit) {
+        if (storedAccessKey.isBlank()) return@LaunchedEffect
+
+        val remoteKeys = withContext(Dispatchers.IO) {
+            fetchRemoteAccessKeys()
+        }
+
+        if (remoteKeys != null && storedAccessKey !in remoteKeys) {
+            preferenceManager.myPrefs.cloudAccessKey = null
+            preferenceManager.myPrefs.cloudSubExpiry = 0L
+            preferenceManager.savePreferences()
+            refreshTrigger++
+            Toast.makeText(context, "Access key removed", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(refreshTrigger) {
         val jioServers = repository.fetchServers(decodeCloudUrl(CLOUD_SRC_A))
@@ -127,7 +144,7 @@ fun CloudHomeScreen(
             url = decodeCloudUrl(CLOUD_SRC_F),
             logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2022/01/95/61f1ed6874463.png"
         )
-        
+
         val fancodeServer = CloudServer(
             name = "Fancode Live",
             url = decodeCloudUrl(CLOUD_SRC_E),
@@ -354,6 +371,7 @@ fun CloudHomeScreen(
 
                 if (isSubscribed) {
                     TextButton(onClick = {
+                        preferenceManager.myPrefs.cloudAccessKey = null
                         preferenceManager.myPrefs.cloudSubExpiry = 0L
                         preferenceManager.savePreferences()
                         Toast.makeText(context, "Subscription removed", Toast.LENGTH_SHORT).show()
@@ -388,6 +406,7 @@ fun CloudHomeScreen(
                 scope.launch {
                     val validity = validateKeyWithRemote(key)
                     if (validity != null) {
+                        preferenceManager.myPrefs.cloudAccessKey = key.trim()
                         preferenceManager.myPrefs.cloudSubExpiry = validity
                         preferenceManager.savePreferences()
                         Toast.makeText(context, "Key applied!", Toast.LENGTH_LONG).show()
@@ -658,20 +677,29 @@ fun CouponDialog(onDismiss: () -> Unit, onApply: (String) -> Unit) {
     )
 }
 
-private suspend fun fetchRemoteAccessKey(): String? = withContext(Dispatchers.IO) {
+private suspend fun fetchRemoteAccessKeys(): Set<String>? = withContext(Dispatchers.IO) {
     val request = Request.Builder().url(REMOTE_ACCESS_KEY_URL).build()
 
     runCatching {
         accessKeyHttpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return@withContext null
 
-            val remoteEncodedKey = response.body?.string()?.trim().orEmpty()
-            if (remoteEncodedKey.isBlank()) return@withContext null
+            val remoteEncodedKeys = response.body?.string().orEmpty()
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .toList()
 
-            String(
-                android.util.Base64.decode(remoteEncodedKey, android.util.Base64.DEFAULT),
-                Charsets.UTF_8
-            ).trim()
+            if (remoteEncodedKeys.isEmpty()) return@withContext emptySet()
+
+            remoteEncodedKeys.mapNotNull { encodedKey ->
+                runCatching {
+                    String(
+                        android.util.Base64.decode(encodedKey, android.util.Base64.DEFAULT),
+                        Charsets.UTF_8
+                    ).trim()
+                }.getOrNull()?.takeIf { it.isNotBlank() }
+            }.toSet()
         }
     }.getOrNull()
 }
@@ -679,9 +707,9 @@ private suspend fun fetchRemoteAccessKey(): String? = withContext(Dispatchers.IO
 private suspend fun validateKeyWithRemote(rawKey: String): Long? {
     val localValidity = validateKey(rawKey) ?: return null
     val cleanKey = rawKey.trim()
-    val remoteKey = fetchRemoteAccessKey() ?: return null
+    val remoteKeys = fetchRemoteAccessKeys() ?: return null
 
-    return if (remoteKey == cleanKey) localValidity else null
+    return if (cleanKey in remoteKeys) localValidity else null
 }
 
 fun validateKey(rawKey: String): Long? {
