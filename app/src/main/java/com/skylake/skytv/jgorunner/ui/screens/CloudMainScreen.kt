@@ -1,11 +1,12 @@
 package com.skylake.skytv.jgorunner.ui.screens
 
-import android.app.Activity
-import android.widget.Toast
 import android.content.Context
+import android.content.Intent
 import android.content.ContextWrapper
+import android.app.Activity
 import android.util.Log
 import android.view.KeyEvent
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
@@ -57,6 +58,7 @@ import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import com.skylake.skytv.jgorunner.utils.LogCollector
 import com.skylake.skytv.jgorunner.data.CloudDataManager
 import com.skylake.skytv.jgorunner.core.execution.runBinary
+import com.skylake.skytv.jgorunner.activities.WebPlayerActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -65,8 +67,8 @@ private const val ZEE5_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/c
 private const val SONY_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sony.json"
 private const val SPORTS_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sports.json"
 private const val FANCODE_SERVER_URL = "https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json"
-private const val TATA_BING_URL_ENC = "aHR0cHM6Ly9hbGxpbm9uZXJlYm9ybi5vbmxpbmUvdHBsYXkvY2hhbm5lbHMuanNvbg=="
-private const val JIO_CRYSTAL_URL_ENC = "aHR0cHM6Ly9hbGxpbm9uZXJlYm9ybi5vbmxpbmUvanR2LWZldGNoL2pzdHI0d2ViLmpzb24="
+private const val TATA_BING_URL_ENC = "aHR0cHM6Ly9hdmVuZ2Vycy13ZWIuaGFrdW5hbWF0YS53b3JrZXJzLmRldi8="
+private const val JIO_CRYSTAL_URL_ENC = "aHR0cHM6Ly9hdmVuZ2Vycy1pcHR2LXdlYi5oYWt1bmFtYXRhLndvcmtlcnMuZGV2Lw=="
 
 private fun decodeUrl(encoded: String): String =
     String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
@@ -343,7 +345,23 @@ fun CloudMainScreen(
                                     ServerListItem(
                                         server = server,
                                         isSelected = server.url == currentServer?.url,
-                                        onSelected = { currentServer = server }
+                                        onSelected = {
+                                            val isTataBing = server.name.contains("Tata Bing", ignoreCase = true)
+                                            val isCrystal = server.name.contains("Jio Crystal", ignoreCase = true)
+                                            if (isTataBing || isCrystal) {
+                                                val startupUrl = if (isCrystal) {
+                                                    "https://avengers-iptv-web.hakunamata.workers.dev/"
+                                                } else {
+                                                    "https://avengers-web.hakunamata.workers.dev/"
+                                                }
+                                                val intent = Intent(context, WebPlayerActivity::class.java).apply {
+                                                    putExtra("startup_url", startupUrl)
+                                                }
+                                                context.startActivity(intent)
+                                            } else {
+                                                currentServer = server
+                                            }
+                                        }
                                     )
                                 }
                             }

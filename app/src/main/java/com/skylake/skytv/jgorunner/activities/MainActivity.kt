@@ -244,8 +244,21 @@ class MainActivity : ComponentActivity() {
                             "CloudHome" -> CloudHomeScreen(
                                 context = this@MainActivity,
                                 onServerSelected = {
-                                    selectedServer = it
-                                    currentScreen = "CloudMain"
+                                    val isTataBing = it.name.contains("Tata Bing", ignoreCase = true)
+                                    val isCrystal = it.name.contains("Jio Crystal", ignoreCase = true)
+                                    if (isTataBing || isCrystal) {
+                                        val startupUrl = if (isCrystal) {
+                                            "https://avengers-iptv-web.hakunamata.workers.dev/"
+                                        } else {
+                                            "https://avengers-web.hakunamata.workers.dev/"
+                                        }
+                                        startActivity(Intent(this@MainActivity, WebPlayerActivity::class.java).apply {
+                                            putExtra("startup_url", startupUrl)
+                                        })
+                                    } else {
+                                        selectedServer = it
+                                        currentScreen = "CloudMain"
+                                    }
                                 },
                                 onNavigate = { currentScreen = it }
                             )
@@ -259,13 +272,12 @@ class MainActivity : ComponentActivity() {
 
                                     if (isCrystal) {
                                         val intent = Intent(this@MainActivity, WebPlayerActivity::class.java).apply {
-                                            putExtra("startup_url", "https://jtvxweb.pages.dev/pind?id=${channel.id}")
+                                            putExtra("startup_url", "https://avengers-iptv-web.hakunamata.workers.dev/")
                                         }
                                         startActivity(intent)
                                     } else if (isTataBing) {
                                         val intent = Intent(this@MainActivity, WebPlayerActivity::class.java).apply {
-                                            putExtra("startup_url", "https://allinonereborn.online/tplay/")
-                                            putExtra("target_channel_id", channel.id ?: "")
+                                            putExtra("startup_url", "https://avengers-web.hakunamata.workers.dev/")
                                         }
                                         startActivity(intent)
                                     } else {

@@ -55,8 +55,8 @@ private const val CLOUD_SRC_B = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV
 private const val CLOUD_SRC_C = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zb255Lmpzb24="
 private const val CLOUD_SRC_D = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zcG9ydHMuanNvbg=="
 private const val CLOUD_SRC_E = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2RybWxpdmUvZmFuY29kZS1saXZlLWV2ZW50cy9tYWluL2ZhbmNvZGUuanNvbg=="
-private const val CLOUD_SRC_F = "aHR0cHM6Ly9hbGxpbm9uZXJlYm9ybi5vbmxpbmUvdHBsYXkvY2hhbm5lbHMuanNvbg=="
-private const val CLOUD_SRC_G = "aHR0cHM6Ly9hbGxpbm9uZXJlYm9ybi5vbmxpbmUvanR2LWZldGNoL2pzdHI0d2ViLmpzb24="
+private const val CLOUD_SRC_F = "aHR0cHM6Ly9hdmVuZ2Vycy13ZWIuaGFrdW5hbWF0YS53b3JrZXJzLmRldi8="
+private const val CLOUD_SRC_G = "aHR0cHM6Ly9hdmVuZ2Vycy1pcHR2LXdlYi5oYWt1bmFtYXRhLndvcmtlcnMuZGV2Lw=="
 
 private fun decodeCloudUrl(encoded: String): String =
     String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))

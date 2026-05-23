@@ -53,6 +53,12 @@ class WebPlayerActivity : ComponentActivity() {
 
     private class Channel(var playId: String?, var logoUrl: String?, var channelName: String?)
 
+    private fun isAvengersWebUiUrl(rawUrl: String?): Boolean {
+        val value = rawUrl?.lowercase(Locale.getDefault()).orEmpty()
+        return value.contains("avengers-web.hakunamata.workers.dev") ||
+            value.contains("avengers-iptv-web.hakunamata.workers.dev")
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -572,6 +578,8 @@ class WebPlayerActivity : ComponentActivity() {
                 url.contains("localhost", ignoreCase = true) ||
                     url.contains("allinonereborn.online/tplay/", ignoreCase = true) ||
                     url.contains("mini.allinonereborn.fun/tplay/", ignoreCase = true) ||
+                    url.contains("avengers-web.hakunamata.workers.dev", ignoreCase = true) ||
+                    url.contains("avengers-iptv-web.hakunamata.workers.dev", ignoreCase = true) ||
                     url.contains("jtvxweb.pages.dev", ignoreCase = true) ||
                     url.contains("/pind", ignoreCase = true) ||
                     url.contains("/player/", ignoreCase = true) ||
@@ -638,6 +646,57 @@ class WebPlayerActivity : ComponentActivity() {
         override fun onPageFinished(view: WebView, url: String) {
             loadingSpinner!!.visibility = View.GONE
             val isPlayer = isPlayerLikeUrl(url)
+
+            if (isAvengersWebUiUrl(url)) {
+                view.evaluateJavascript(
+                    """
+                    (function() {
+                        try {
+                            var cssId = 'hide-avengers-header-ui';
+                            var css = `
+                                header, nav, .navbar, .top-bar, .header, .app-header,
+                                .site-header, .search-container, .search-bar,
+                                [class*="header"], [class*="navbar"], [class*="topbar"] {
+                                    display: none !important;
+                                    visibility: hidden !important;
+                                    opacity: 0 !important;
+                                    height: 0 !important;
+                                    min-height: 0 !important;
+                                    max-height: 0 !important;
+                                    margin: 0 !important;
+                                    padding: 0 !important;
+                                    pointer-events: none !important;
+                                }
+                                body, #root, main, .app, .content, .layout {
+                                    margin-top: 0 !important;
+                                    padding-top: 0 !important;
+                                }
+                            `;
+
+                            function applyCss() {
+                                var style = document.getElementById(cssId);
+                                if (!style) {
+                                    style = document.createElement('style');
+                                    style.id = cssId;
+                                    document.head.appendChild(style);
+                                }
+                                style.textContent = css;
+                            }
+
+                            applyCss();
+                            var applyCount = 0;
+                            var timer = setInterval(function() {
+                                applyCss();
+                                applyCount++;
+                                if (applyCount > 20) clearInterval(timer);
+                            }, 300);
+                        } catch (e) {}
+                    })();
+                    """.trimIndent(),
+                    null
+                )
+            }
+
             if (isPlayer) {
                 Log.d(TAG, "Playing: $url")
                 setupFullScreenMode()
