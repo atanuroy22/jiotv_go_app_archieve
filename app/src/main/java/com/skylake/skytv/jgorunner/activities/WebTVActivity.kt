@@ -169,6 +169,37 @@ class WebPlayerActivity : ComponentActivity() {
                 refreshShakaViewportLayout()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Ensure WebView has focus so DPAD events are delivered to it
+        try {
+            webView?.isFocusable = true
+            webView?.isFocusableInTouchMode = true
+            webView?.requestFocus(View.FOCUS_DOWN)
+        } catch (_: Exception) {}
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Forward DPAD and enter/back keys to the WebView so web apps can handle remote navigation
+        val dpadKeys = setOf(
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_DPAD_CENTER
+        )
+
+        if (webView != null && dpadKeys.contains(event.keyCode)) {
+            try {
+                if (webView!!.dispatchKeyEvent(event)) return true
+            } catch (_: Exception) {}
+        }
+
+        return super.dispatchKeyEvent(event)
+    }
+
         private fun refreshShakaViewportLayout() {
                 val currentUrl = webView?.url.orEmpty()
                 val isPlayerLikeUrl = currentUrl.contains("/player/") ||
@@ -307,6 +338,20 @@ class WebPlayerActivity : ComponentActivity() {
                                 setTimeout(function() {
                                     window.dispatchEvent(new Event('resize'));
                                 }, 120);
+                                
+                                                // Hide any branding text nodes that mention Avenger/Avengers IPTV-WEB
+                                                try {
+                                                    document.querySelectorAll('*').forEach(function(el) {
+                                                        try {
+                                                            if (el && el.innerText && /Avengers?\s*IPTV-?WEB/i.test(el.innerText)) {
+                                                                el.style.display = 'none' !important;
+                                                                el.style.visibility = 'hidden' !important;
+                                                                el.style.opacity = '0' !important;
+                                                            }
+                                                        } catch (e) {}
+                                                    });
+                                                } catch (e) {}
+
                             } catch (e) {}
                         })();
                         """.trimIndent(),

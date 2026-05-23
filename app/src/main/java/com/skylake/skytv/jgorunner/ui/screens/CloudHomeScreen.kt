@@ -44,7 +44,12 @@ import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.data.selectSdServerWithFallback
 import com.skylake.skytv.jgorunner.ui.components.MultiSelectFilterDialog
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.util.Calendar
 import java.util.Date
 import java.text.SimpleDateFormat
@@ -57,6 +62,9 @@ private const val CLOUD_SRC_D = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV
 private const val CLOUD_SRC_E = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2RybWxpdmUvZmFuY29kZS1saXZlLWV2ZW50cy9tYWluL2ZhbmNvZGUuanNvbg=="
 private const val CLOUD_SRC_F = "aHR0cHM6Ly9hdmVuZ2Vycy13ZWIuaGFrdW5hbWF0YS53b3JrZXJzLmRldi8="
 private const val CLOUD_SRC_G = "aHR0cHM6Ly9hdmVuZ2Vycy1pcHR2LXdlYi5oYWt1bmFtYXRhLndvcmtlcnMuZGV2Lw=="
+private const val REMOTE_ACCESS_KEY_URL = "https://raw.githubusercontent.com/atanuroy22/j/refs/heads/main/j"
+
+private val accessKeyHttpClient = OkHttpClient()
 
 private fun decodeCloudUrl(encoded: String): String =
     String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
@@ -70,6 +78,7 @@ fun CloudHomeScreen(
     val preferenceManager = SkySharedPref.getInstance(context)
     val repository = remember { CloudRepository(context) }
     val gson = remember { Gson() }
+    val scope = rememberCoroutineScope()
 
     var allServers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
     var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
@@ -376,15 +385,17 @@ fun CloudHomeScreen(
         CouponDialog(
             onDismiss = { showCouponDialog = false },
             onApply = { key ->
-                val validity = validateKey(key)
-                if (validity != null) {
-                    preferenceManager.myPrefs.cloudSubExpiry = validity
-                    preferenceManager.savePreferences()
-                    Toast.makeText(context, "Key applied!", Toast.LENGTH_LONG).show()
-                    showCouponDialog = false
-                    refreshTrigger++
-                } else {
-                    Toast.makeText(context, "Invalid key format or expired!", Toast.LENGTH_SHORT).show()
+                scope.launch {
+                    val validity = validateKeyWithRemote(key)
+                    if (validity != null) {
+                        preferenceManager.myPrefs.cloudSubExpiry = validity
+                        preferenceManager.savePreferences()
+                        Toast.makeText(context, "Key applied!", Toast.LENGTH_LONG).show()
+                        showCouponDialog = false
+                        refreshTrigger++
+                    } else {
+                        Toast.makeText(context, "Invalid key or remote check failed!", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         )
@@ -645,6 +656,32 @@ fun CouponDialog(onDismiss: () -> Unit, onApply: (String) -> Unit) {
         titleContentColor = Color.White,
         textContentColor = Color.White
     )
+}
+
+private suspend fun fetchRemoteAccessKey(): String? = withContext(Dispatchers.IO) {
+    val request = Request.Builder().url(REMOTE_ACCESS_KEY_URL).build()
+
+    runCatching {
+        accessKeyHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return@withContext null
+
+            val remoteEncodedKey = response.body?.string()?.trim().orEmpty()
+            if (remoteEncodedKey.isBlank()) return@withContext null
+
+            String(
+                android.util.Base64.decode(remoteEncodedKey, android.util.Base64.DEFAULT),
+                Charsets.UTF_8
+            ).trim()
+        }
+    }.getOrNull()
+}
+
+private suspend fun validateKeyWithRemote(rawKey: String): Long? {
+    val localValidity = validateKey(rawKey) ?: return null
+    val cleanKey = rawKey.trim()
+    val remoteKey = fetchRemoteAccessKey() ?: return null
+
+    return if (remoteKey == cleanKey) localValidity else null
 }
 
 fun validateKey(rawKey: String): Long? {
