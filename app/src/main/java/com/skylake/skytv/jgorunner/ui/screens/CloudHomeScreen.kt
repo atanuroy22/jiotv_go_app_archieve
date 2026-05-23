@@ -389,8 +389,7 @@ fun CloudHomeScreen(
                                 Text(
                                     text = expiryText,
                                     color = Color.Yellow,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.weight(1f)
+                                    fontSize = 11.sp
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 // Small label to attract attention
@@ -410,22 +409,30 @@ fun CloudHomeScreen(
                                 onDismissRequest = { showOfferDialog = false },
                                 modifier = Modifier.widthIn(min = 250.dp, max = 340.dp)
                             ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text("Special Offer — Jio+ & Sports", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                    Spacer(Modifier.height(6.dp))
-                                    Text("Includes: JioTV+, Sony, Zee, Sports, Tata Play", color = Color.White, fontSize = 12.sp)
-                                    Spacer(Modifier.height(6.dp))
-                                    Text("• 1 week — ₹10", color = Color.White, fontSize = 12.sp)
-                                    Text("• 1 month — ₹40", color = Color.White, fontSize = 12.sp)
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text("Special Offer — Jio+ & Sports", color = Color.Cyan, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                     Spacer(Modifier.height(8.dp))
-                                    Text("1. Pay the amount through UPI.", color = Color.Gray, fontSize = 10.sp)
-                                    Text("2. Send the screenshot to Telegram.", color = Color.Gray, fontSize = 10.sp)
-                                    Text("3. New key will be sent to your Telegram.", color = Color.Gray, fontSize = 10.sp)
-                                    Spacer(Modifier.height(8.dp))
+                                    Text("Includes: JioTV+, Sony, Zee, Sports, Tata Play", color = Color.White, fontSize = 13.sp)
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("• 1 week — ₹10", color = Color.White, fontSize = 13.sp)
+                                    Text("• 1 month — ₹40", color = Color.White, fontSize = 13.sp)
+                                    Spacer(Modifier.height(12.dp))
+
+                                    Text("Steps to Activate:", color = Color.Cyan, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("1. Pay the amount through UPI.", color = Color.White, fontSize = 12.sp)
+                                    Text("2. Send the screenshot to Telegram.", color = Color.White, fontSize = 12.sp)
+                                    Text("3. New key will be sent to your Telegram.", color = Color.White, fontSize = 12.sp)
+
+                                    androidx.compose.material3.HorizontalDivider(
+                                        color = Color.Gray.copy(alpha = 0.3f),
+                                        modifier = Modifier.padding(vertical = 12.dp)
+                                    )
+
                                     Text(
                                         "Note: You're accessing with less price, so don't compare with the original app features and stability.",
                                         color = Color.Gray,
-                                        fontSize = 9.sp
+                                        fontSize = 10.sp
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     Row {
