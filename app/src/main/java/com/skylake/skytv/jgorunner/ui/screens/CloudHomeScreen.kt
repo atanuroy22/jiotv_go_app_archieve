@@ -194,7 +194,9 @@ fun CloudHomeScreen(
                     val isFancode = server.name.contains("fancode", ignoreCase = true)
                     val isZeeSd = server.name.contains("zee", ignoreCase = true) &&
                         server.name.contains("sd", ignoreCase = true)
-                    !(isJio || isSonyIn || isFancode || isZeeSd) || (isSlow && !isJio)
+                    val isTataBing = server.name.contains("tata bing", ignoreCase = true)
+                    val isJioCrystal = server.name.contains("jio crystal", ignoreCase = true)
+                    !(isJio || isSonyIn || isFancode || isZeeSd || isTataBing || isJioCrystal) || (isSlow && !isJio)
                 }
                 .map { it.url }
                 .toMutableList()
@@ -203,6 +205,14 @@ fun CloudHomeScreen(
                 preferenceManager.myPrefs.cloudHiddenServerUrls = gson.toJson(currentHiddenUrls)
                 preferenceManager.savePreferences()
             }
+        }
+        
+        // Always ensure Tata Bing is never hidden, even after reset
+        val tataBingUrl = decodeCloudUrl(CLOUD_SRC_F)
+        if (tataBingUrl in currentHiddenUrls) {
+            currentHiddenUrls.remove(tataBingUrl)
+            preferenceManager.myPrefs.cloudHiddenServerUrls = gson.toJson(currentHiddenUrls)
+            preferenceManager.savePreferences()
         }
 
         val visibleServers = baseList.filter { it.url !in currentHiddenUrls }
