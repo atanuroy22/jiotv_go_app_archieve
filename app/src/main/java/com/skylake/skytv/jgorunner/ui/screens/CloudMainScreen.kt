@@ -114,16 +114,14 @@ fun CloudMainScreen(
         }
     }
     val tataBingUrl = remember { decodeUrl(TATA_BING_URL_ENC) }
-    val effectiveHiddenServerUrls = remember(hiddenServerUrls, tataBingUrl) {
-        hiddenServerUrls.filterNot { it == tataBingUrl }
-    }
+    val effectiveHiddenServerUrls = hiddenServerUrls
 
     LaunchedEffect(hiddenServerUrls, tataBingUrl) {
-        if (tataBingUrl in hiddenServerUrls) {
-            val updatedHidden = hiddenServerUrls.filterNot { it == tataBingUrl }
-            preferenceManager.myPrefs.cloudHiddenServerUrls = gson.toJson(updatedHidden)
-            preferenceManager.savePreferences()
-        }
+//        if (tataBingUrl in hiddenServerUrls) {
+//            val updatedHidden = hiddenServerUrls.filterNot { it == tataBingUrl }
+//            preferenceManager.myPrefs.cloudHiddenServerUrls = gson.toJson(updatedHidden)
+//            preferenceManager.savePreferences()
+//        }
     }
 
     var selectedCategories by remember(currentServer) {
