@@ -114,7 +114,9 @@ fun CloudMainScreen(
         }
     }
     val tataBingUrl = remember { decodeUrl(TATA_BING_URL_ENC) }
-    val effectiveHiddenServerUrls = hiddenServerUrls
+    val effectiveHiddenServerUrls = hiddenServerUrls.toMutableList().apply {
+        remove(tataBingUrl)
+    }.toList()
 
     LaunchedEffect(hiddenServerUrls, tataBingUrl) {
 //        if (tataBingUrl in hiddenServerUrls) {
