@@ -207,14 +207,6 @@ fun CloudHomeScreen(
             }
         }
         
-        // Always ensure Tata Bing is never hidden, even after reset
-        val tataBingUrl = decodeCloudUrl(CLOUD_SRC_F)
-        if (tataBingUrl in currentHiddenUrls) {
-            currentHiddenUrls.remove(tataBingUrl)
-            preferenceManager.myPrefs.cloudHiddenServerUrls = gson.toJson(currentHiddenUrls)
-            preferenceManager.savePreferences()
-        }
-
         val visibleServers = baseList.filter { it.url !in currentHiddenUrls }
         allServers = baseList
         servers = visibleServers
