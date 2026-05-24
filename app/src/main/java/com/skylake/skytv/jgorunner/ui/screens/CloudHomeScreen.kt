@@ -291,7 +291,7 @@ fun CloudHomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Cloud Play",
+                    text = "Cloud UI",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.Cyan,
