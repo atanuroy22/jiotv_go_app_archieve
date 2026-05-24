@@ -62,11 +62,11 @@ import com.skylake.skytv.jgorunner.activities.WebPlayerActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val JIO_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/jiotv+.json"
-private const val ZEE5_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/zee5.json"
-private const val SONY_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sony.json"
-private const val SPORTS_SERVER_LIST_URL = "https://cloudplay-app-json.pages.dev/cat/sports.json"
-private const val FANCODE_SERVER_URL = "https://raw.githubusercontent.com/drmlive/fancode-live-events/main/fancode.json"
+private const val JIO_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9qaW90disuanNvbg=="
+private const val ZEE5_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC96ZWU1Lmpzb24="
+private const val SONY_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zb255Lmpzb24="
+private const val SPORTS_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zcG9ydHMuanNvbg=="
+private const val FANCODE_SERVER_URL_ENC = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2RybWxpdmUvZmFuY29kZS1saXZlLWV2ZW50cy9tYWluL2ZhbmNvZGUuanNvbg=="
 private const val TATA_BING_URL_ENC = "aHR0cHM6Ly9hdmVuZ2Vycy13ZWIuaGFrdW5hbWF0YS53b3JrZXJzLmRldi8="
 private const val JIO_CRYSTAL_URL_ENC = "aHR0cHM6Ly9hdmVuZ2Vycy1pcHR2LXdlYi5oYWt1bmFtYXRhLndvcmtlcnMuZGV2Lw=="
 
@@ -113,6 +113,18 @@ fun CloudMainScreen(
             emptyList()
         }
     }
+    val tataBingUrl = remember { decodeUrl(TATA_BING_URL_ENC) }
+    val effectiveHiddenServerUrls = remember(hiddenServerUrls, tataBingUrl) {
+        hiddenServerUrls.filterNot { it == tataBingUrl }
+    }
+
+    LaunchedEffect(hiddenServerUrls, tataBingUrl) {
+        if (tataBingUrl in hiddenServerUrls) {
+            val updatedHidden = hiddenServerUrls.filterNot { it == tataBingUrl }
+            preferenceManager.myPrefs.cloudHiddenServerUrls = gson.toJson(updatedHidden)
+            preferenceManager.savePreferences()
+        }
+    }
 
     var selectedCategories by remember(currentServer) {
         mutableStateOf(serverFiltersMap[currentServer?.url] ?: emptySet())
@@ -154,10 +166,10 @@ fun CloudMainScreen(
     }
 
     LaunchedEffect(Unit) {
-        val jioServers = repository.fetchServers(JIO_SERVER_LIST_URL)
-        val zee5Servers = selectSdServerWithFallback(repository.fetchServers(ZEE5_SERVER_LIST_URL))
-        val sonyServers = repository.fetchServers(SONY_SERVER_LIST_URL)
-        val sportsServers = repository.fetchServers(SPORTS_SERVER_LIST_URL)
+        val jioServers = repository.fetchServers(decodeUrl(JIO_SERVER_LIST_URL_ENC))
+        val zee5Servers = selectSdServerWithFallback(repository.fetchServers(decodeUrl(ZEE5_SERVER_LIST_URL_ENC)))
+        val sonyServers = repository.fetchServers(decodeUrl(SONY_SERVER_LIST_URL_ENC))
+        val sportsServers = repository.fetchServers(decodeUrl(SPORTS_SERVER_LIST_URL_ENC))
         val isSubscribed = preferenceManager.myPrefs.cloudSubExpiry > System.currentTimeMillis()
         val freeJio = CloudServer(
             name = "Free Jio",
@@ -176,7 +188,7 @@ fun CloudMainScreen(
         )
         val fancodeServer = CloudServer(
             name = "Fancode Live",
-            url = FANCODE_SERVER_URL,
+            url = decodeUrl(FANCODE_SERVER_URL_ENC),
             logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2021/06/26/60d9761924e40.png"
         )
         val fetched = if (isSubscribed) {
@@ -184,19 +196,19 @@ fun CloudMainScreen(
         } else {
             listOf(freeJio)
         }
-        val visibleServers = fetched.filter { it.url !in hiddenServerUrls }
+        val visibleServers = fetched.filter { it.url !in effectiveHiddenServerUrls }
         servers = visibleServers
-        if (currentServer == null || currentServer?.url in hiddenServerUrls) {
+        if (currentServer == null || currentServer?.url in effectiveHiddenServerUrls) {
             currentServer = servers.firstOrNull()
         }
     }
 
-    LaunchedEffect(hiddenServerUrls, servers) {
+    LaunchedEffect(effectiveHiddenServerUrls, servers) {
         if (servers.isEmpty()) {
             return@LaunchedEffect
         }
         val activeUrl = currentServer?.url
-        if (activeUrl == null || activeUrl in hiddenServerUrls || servers.none { it.url == activeUrl }) {
+        if (activeUrl == null || activeUrl in effectiveHiddenServerUrls || servers.none { it.url == activeUrl }) {
             currentServer = servers.firstOrNull()
         }
     }
