@@ -494,7 +494,18 @@ fun CloudMainScreen(
                     .background(Color(0xFF202020))
                     .padding(12.dp)
             ) {
-                Text("Search Channels", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Search Channels", color = Color.Cyan, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.weight(1f))
+                    IconButton(onClick = { isSearchVisible = false }, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, "Close", tint = Color.Red, modifier = Modifier.size(18.dp))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
                     value = searchQuery,
@@ -523,15 +534,6 @@ fun CloudMainScreen(
                         contentPadding = PaddingValues(0.dp)
                     ) {
                         Text("Clear", fontSize = 11.sp)
-                    }
-                    Button(
-                        onClick = { isSearchVisible = false },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333)),
-                        shape = RoundedCornerShape(4.dp),
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Text("Close", fontSize = 11.sp)
                     }
                 }
 
