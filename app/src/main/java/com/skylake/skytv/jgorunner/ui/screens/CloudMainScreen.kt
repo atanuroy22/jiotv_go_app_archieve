@@ -401,6 +401,22 @@ fun CloudMainScreen(
                             }
                         }
                         item {
+                            var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAnimationEnabled) }
+                            SettingsToggleRefreshed("Animations", checked) {
+                                checked = it
+                                preferenceManager.myPrefs.cloudAnimationEnabled = it
+                                preferenceManager.savePreferences()
+                            }
+                        }
+                        item {
+                            var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudFocusAnimationEnabled) }
+                            SettingsToggleRefreshed("Focus Glow", checked) {
+                                checked = it
+                                preferenceManager.myPrefs.cloudFocusAnimationEnabled = it
+                                preferenceManager.savePreferences()
+                            }
+                        }
+                        item {
                             SettingsActionItemCompact("Search", Icons.Default.Search) { isSearchVisible = !isSearchVisible }
                         }
                         item {
@@ -441,22 +457,6 @@ fun CloudMainScreen(
                         }
                         item {
                             SettingsActionItemCompact("Logs", Icons.Default.BugReport) { showLogDialog = true }
-                        }
-                        item {
-                            var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudAnimationEnabled) }
-                            SettingsToggleRefreshed("Animations", checked) {
-                                checked = it
-                                preferenceManager.myPrefs.cloudAnimationEnabled = it
-                                preferenceManager.savePreferences()
-                            }
-                        }
-                        item {
-                            var checked by remember { mutableStateOf(preferenceManager.myPrefs.cloudFocusAnimationEnabled) }
-                            SettingsToggleRefreshed("Focus Glow", checked) {
-                                checked = it
-                                preferenceManager.myPrefs.cloudFocusAnimationEnabled = it
-                                preferenceManager.savePreferences()
-                            }
                         }
                         item {
                             SettingsActionItemCompact("Reset Settings", Icons.Default.RestartAlt) {
