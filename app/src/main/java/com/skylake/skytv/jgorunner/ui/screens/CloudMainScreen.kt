@@ -51,7 +51,8 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.skylake.skytv.jgorunner.data.CloudRepository
 import com.skylake.skytv.jgorunner.data.SkySharedPref
-import com.skylake.skytv.jgorunner.data.selectSdServerWithFallback
+import com.skylake.skytv.jgorunner.data.CloudServerEntry
+import com.skylake.skytv.jgorunner.data.fetchCloudServerCatalog
 import com.skylake.skytv.jgorunner.ui.components.MultiSelectFilterDialog
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudChannel
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
@@ -62,21 +63,12 @@ import com.skylake.skytv.jgorunner.activities.WebPlayerActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val JIO_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9qaW90disuanNvbg=="
-private const val ZEE5_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC96ZWU1Lmpzb24="
-private const val SONY_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zb255Lmpzb24="
-private const val SPORTS_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zcG9ydHMuanNvbg=="
-private const val FANCODE_SERVER_URL_ENC = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2RybWxpdmUvZmFuY29kZS1saXZlLWV2ZW50cy9tYWluL2ZhbmNvZGUuanNvbg=="
-private const val TATA_BING_URL_ENC = "aHR0cHM6Ly9hdmVuZ2Vycy13ZWIuaGFrdW5hbWF0YS53b3JrZXJzLmRldi8="
-private const val JIO_CRYSTAL_URL_ENC = "aHR0cHM6Ly9hdmVuZ2Vycy1pcHR2LXdlYi5oYWt1bmFtYXRhLndvcmtlcnMuZGV2Lw=="
-
-private fun decodeUrl(encoded: String): String =
-    String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
 
 @Composable
 fun CloudMainScreen(
     context: Context,
     initialServer: CloudServer?,
+    selectedCategory: String?,
     onNavigate: (String) -> Unit,
     onPlayChannel: (CloudChannel, List<CloudChannel>) -> Unit
 ) {
@@ -86,7 +78,7 @@ fun CloudMainScreen(
     val gson = remember { Gson() }
 
     var currentServer by remember(initialServer) { mutableStateOf(initialServer) }
-    var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
+    var serverEntries by remember { mutableStateOf<List<CloudServerEntry>>(emptyList()) }
     var channels by remember { mutableStateOf<List<CloudChannel>>(emptyList()) }
     var isLoadingChannels by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -113,17 +105,26 @@ fun CloudMainScreen(
             emptyList()
         }
     }
-    val tataBingUrl = remember { decodeUrl(TATA_BING_URL_ENC) }
-    val effectiveHiddenServerUrls = hiddenServerUrls.toMutableList().apply {
-        remove(tataBingUrl)
-    }.toList()
+    val effectiveHiddenServerUrls = hiddenServerUrls
 
-    LaunchedEffect(hiddenServerUrls, tataBingUrl) {
-//        if (tataBingUrl in hiddenServerUrls) {
-//            val updatedHidden = hiddenServerUrls.filterNot { it == tataBingUrl }
-//            preferenceManager.myPrefs.cloudHiddenServerUrls = gson.toJson(updatedHidden)
-//            preferenceManager.savePreferences()
-//        }
+    var showAllServers by remember {
+        mutableStateOf(preferenceManager.myPrefs.cloudShowAllServers)
+    }
+
+    val entryByUrl = remember(serverEntries) {
+        serverEntries.associateBy { it.server.url }
+    }
+
+    val visibleEntries = remember(serverEntries, effectiveHiddenServerUrls) {
+        serverEntries.filter { it.server.url !in effectiveHiddenServerUrls }
+    }
+
+    val sidebarEntries = remember(visibleEntries, showAllServers, selectedCategory) {
+        if (!showAllServers && !selectedCategory.isNullOrBlank()) {
+            visibleEntries.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+        } else {
+            visibleEntries
+        }
     }
 
     var selectedCategories by remember(currentServer) {
@@ -166,50 +167,25 @@ fun CloudMainScreen(
     }
 
     LaunchedEffect(Unit) {
-        val jioServers = repository.fetchServers(decodeUrl(JIO_SERVER_LIST_URL_ENC))
-        val zee5Servers = selectSdServerWithFallback(repository.fetchServers(decodeUrl(ZEE5_SERVER_LIST_URL_ENC)))
-        val sonyServers = repository.fetchServers(decodeUrl(SONY_SERVER_LIST_URL_ENC))
-        val sportsServers = repository.fetchServers(decodeUrl(SPORTS_SERVER_LIST_URL_ENC))
-        val isSubscribed = preferenceManager.myPrefs.cloudSubExpiry > System.currentTimeMillis()
-        val freeJio = CloudServer(
-            name = "Free Jio",
-            url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
-            logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
-        )
-        val tataBingServer = CloudServer(
-            name = "Tata Bing",
-            url = decodeUrl(TATA_BING_URL_ENC),
-            logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2022/01/95/61f1ed6874463.png"
-        )
-        val jioCrystalServer = CloudServer(
-            name = "Jio Crystal",
-            url = decodeUrl(JIO_CRYSTAL_URL_ENC),
-            logo = "https://yt3.googleusercontent.com/ytc/AIdro_lKULdxBE4H3HJlomG_vs3XMDk6FnCQA6zgO0EVZH5Kvg=s900-c-k-c0x00ffffff-no-rj"
-        )
-        val fancodeServer = CloudServer(
-            name = "Fancode Live",
-            url = decodeUrl(FANCODE_SERVER_URL_ENC),
-            logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2021/06/26/60d9761924e40.png"
-        )
-        val fetched = if (isSubscribed) {
-            (jioServers + listOf(freeJio, fancodeServer) + zee5Servers + sonyServers + sportsServers + listOf(tataBingServer, jioCrystalServer)).distinctBy { it.url }
-        } else {
-            listOf(freeJio)
-        }
-        val visibleServers = fetched.filter { it.url !in effectiveHiddenServerUrls }
-        servers = visibleServers
-        if (currentServer == null || currentServer?.url in effectiveHiddenServerUrls) {
-            currentServer = servers.firstOrNull()
-        }
+        val catalog = fetchCloudServerCatalog(context, repository)
+        serverEntries = catalog.entries
     }
 
-    LaunchedEffect(effectiveHiddenServerUrls, servers) {
-        if (servers.isEmpty()) {
+    LaunchedEffect(effectiveHiddenServerUrls, serverEntries, selectedCategory) {
+        if (visibleEntries.isEmpty()) {
             return@LaunchedEffect
         }
+        val filteredPlayableEntries = visibleEntries.filter { !it.isWebTv }
+        val categoryPlayableEntries = if (!selectedCategory.isNullOrBlank()) {
+            filteredPlayableEntries.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+        } else {
+            filteredPlayableEntries
+        }
+        val fallbackServer = categoryPlayableEntries.firstOrNull()?.server
+            ?: filteredPlayableEntries.firstOrNull()?.server
         val activeUrl = currentServer?.url
-        if (activeUrl == null || activeUrl in effectiveHiddenServerUrls || servers.none { it.url == activeUrl }) {
-            currentServer = servers.firstOrNull()
+        if (activeUrl == null || activeUrl in effectiveHiddenServerUrls || filteredPlayableEntries.none { it.server.url == activeUrl }) {
+            currentServer = fallbackServer
         }
     }
 
@@ -237,12 +213,10 @@ fun CloudMainScreen(
 
             var retryCount = 0
             val isLocal = server.url.contains("localhost") || server.url.contains("127.0.0.1")
-            val isTataBing = server.name.contains("Tata Bing", ignoreCase = true)
-            val isCrystal = server.name.contains("Crystal", ignoreCase = true)
 
             while (retryCount < 5) {
                 try {
-                    val fetchedChannels = repository.fetchChannels(server.url, forceRefresh = isTataBing || isCrystal)
+                    val fetchedChannels = repository.fetchChannels(server.url)
                     if (fetchedChannels.isNotEmpty()) {
                         channels = fetchedChannels
                         errorMessage = null
@@ -351,23 +325,17 @@ fun CloudMainScreen(
                         val isSubscribed = subExpiry > System.currentTimeMillis()
 
                         LazyColumn {
-                            items(servers) { server ->
+                            items(sidebarEntries.map { it.server }) { server ->
                                 val isLocal = server.url.contains("localhost") || server.url.contains("127.0.0.1")
                                 if (isSubscribed || isLocal) {
                                     ServerListItem(
                                         server = server,
                                         isSelected = server.url == currentServer?.url,
                                         onSelected = {
-                                            val isTataBing = server.name.contains("Tata Bing", ignoreCase = true)
-                                            val isCrystal = server.name.contains("Jio Crystal", ignoreCase = true)
-                                            if (isTataBing || isCrystal) {
-                                                val startupUrl = if (isCrystal) {
-                                                    "https://avengers-iptv-web.hakunamata.workers.dev/"
-                                                } else {
-                                                    "https://avengers-web.hakunamata.workers.dev/"
-                                                }
+                                            val isWebTv = entryByUrl[server.url]?.isWebTv == true
+                                            if (isWebTv) {
                                                 val intent = Intent(context, WebPlayerActivity::class.java).apply {
-                                                    putExtra("startup_url", startupUrl)
+                                                    putExtra("startup_url", server.url)
                                                 }
                                                 context.startActivity(intent)
                                             } else {
@@ -429,6 +397,15 @@ fun CloudMainScreen(
                             }
                         }
                         item {
+                            var checked by remember(showAllServers) { mutableStateOf(showAllServers) }
+                            SettingsToggleRefreshed("Show All Servers", checked) {
+                                checked = it
+                                showAllServers = it
+                                preferenceManager.myPrefs.cloudShowAllServers = it
+                                preferenceManager.savePreferences()
+                            }
+                        }
+                        item {
                             SettingsActionItemCompact("Search", Icons.Default.Search) { isSearchVisible = !isSearchVisible }
                         }
                         item {
@@ -476,12 +453,14 @@ fun CloudMainScreen(
                                 preferenceManager.myPrefs.cloudAutoplayLastChannel = true
                                 preferenceManager.myPrefs.cloudAnimationEnabled = true
                                 preferenceManager.myPrefs.cloudFocusAnimationEnabled = true
+                                preferenceManager.myPrefs.cloudShowAllServers = false
                                 preferenceManager.myPrefs.cloudServerFilters = "{}"
                                 preferenceManager.myPrefs.cloudLanguageFilter = ""
                                 preferenceManager.myPrefs.cloudCategoryFilter = null
                                 preferenceManager.myPrefs.cloudUiScale = 1.0f
                                 preferenceManager.myPrefs.filterQX = null
                                 preferenceManager.savePreferences()
+                                showAllServers = false
                                 Toast.makeText(context, "Settings reset", Toast.LENGTH_SHORT).show()
                             }
                         }
@@ -583,7 +562,7 @@ fun CloudMainScreen(
                 }
             }
 
-            if (servers.isEmpty()) {
+            if (visibleEntries.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         text = "All servers are hidden. Open CloudHome settings to unhide.",

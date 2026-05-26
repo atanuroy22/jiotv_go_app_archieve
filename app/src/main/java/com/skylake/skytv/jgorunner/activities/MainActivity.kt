@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
     private var serverStartRequestedAt by mutableStateOf(0L)
 
     private var selectedServer by mutableStateOf<CloudServer?>(null)
+    private var selectedServerCategory by mutableStateOf<String?>(null)
 
     override fun onStart() {
         super.onStart()
@@ -243,50 +244,24 @@ class MainActivity : ComponentActivity() {
                         when (currentScreen) {
                             "CloudHome" -> CloudHomeScreen(
                                 context = this@MainActivity,
-                                onServerSelected = {
-                                    val isTataBing = it.name.contains("Tata Bing", ignoreCase = true)
-                                    val isCrystal = it.name.contains("Jio Crystal", ignoreCase = true)
-                                    if (isTataBing || isCrystal) {
-                                        val startupUrl = if (isCrystal) {
-                                            "https://avengers-iptv-web.hakunamata.workers.dev/"
-                                        } else {
-                                            "https://avengers-web.hakunamata.workers.dev/"
-                                        }
-                                        startActivity(Intent(this@MainActivity, WebPlayerActivity::class.java).apply {
-                                            putExtra("startup_url", startupUrl)
-                                        })
-                                    } else {
-                                        selectedServer = it
-                                        currentScreen = "CloudMain"
-                                    }
+                                onCategorySelected = { category, preferredServer ->
+                                    selectedServerCategory = category
+                                    selectedServer = preferredServer
+                                    currentScreen = "CloudMain"
                                 },
                                 onNavigate = { currentScreen = it }
                             )
                             "CloudMain" -> CloudMainScreen(
                                 context = this@MainActivity,
                                 initialServer = selectedServer,
+                                selectedCategory = selectedServerCategory,
                                 onNavigate = { currentScreen = it },
                                 onPlayChannel = { channel, list ->
-                                    val isCrystal = selectedServer?.name?.contains("Crystal", ignoreCase = true) == true
-                                    val isTataBing = selectedServer?.name?.contains("Tata Bing", ignoreCase = true) == true
-
-                                    if (isCrystal) {
-                                        val intent = Intent(this@MainActivity, WebPlayerActivity::class.java).apply {
-                                            putExtra("startup_url", "https://avengers-iptv-web.hakunamata.workers.dev/")
-                                        }
-                                        startActivity(intent)
-                                    } else if (isTataBing) {
-                                        val intent = Intent(this@MainActivity, WebPlayerActivity::class.java).apply {
-                                            putExtra("startup_url", "https://avengers-web.hakunamata.workers.dev/")
-                                        }
-                                        startActivity(intent)
-                                    } else {
-                                        val intent = Intent(this@MainActivity, CloudPlayerActivity::class.java).apply {
-                                            putExtra("current_cloud_channel_index", list.indexOf(channel))
-                                            putExtra("server_url", selectedServer?.url)
-                                        }
-                                        startActivity(intent)
+                                    val intent = Intent(this@MainActivity, CloudPlayerActivity::class.java).apply {
+                                        putExtra("current_cloud_channel_index", list.indexOf(channel))
+                                        putExtra("server_url", selectedServer?.url)
                                     }
+                                    startActivity(intent)
                                 }
                             )
                             "JioHome" -> HomeScreen(

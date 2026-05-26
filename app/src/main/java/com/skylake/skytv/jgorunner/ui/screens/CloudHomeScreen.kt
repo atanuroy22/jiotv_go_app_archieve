@@ -41,7 +41,8 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.skylake.skytv.jgorunner.data.CloudRepository
 import com.skylake.skytv.jgorunner.data.SkySharedPref
-import com.skylake.skytv.jgorunner.data.selectSdServerWithFallback
+import com.skylake.skytv.jgorunner.data.CloudServerEntry
+import com.skylake.skytv.jgorunner.data.fetchCloudServerCatalog
 import com.skylake.skytv.jgorunner.ui.components.MultiSelectFilterDialog
 import com.skylake.skytv.jgorunner.ui.tvhome.CloudServer
 import kotlinx.coroutines.Dispatchers
@@ -55,24 +56,20 @@ import java.util.Date
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-private const val CLOUD_SRC_A = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9qaW90disuanNvbg=="
-private const val CLOUD_SRC_B = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC96ZWU1Lmpzb24="
-private const val CLOUD_SRC_C = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zb255Lmpzb24="
-private const val CLOUD_SRC_D = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zcG9ydHMuanNvbg=="
-private const val CLOUD_SRC_E = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2RybWxpdmUvZmFuY29kZS1saXZlLWV2ZW50cy9tYWluL2ZhbmNvZGUuanNvbg=="
-private const val CLOUD_SRC_F = "aHR0cHM6Ly9hdmVuZ2Vycy13ZWIuaGFrdW5hbWF0YS53b3JrZXJzLmRldi8="
-private const val CLOUD_SRC_G = "aHR0cHM6Ly9hdmVuZ2Vycy1pcHR2LXdlYi5oYWt1bmFtYXRhLndvcmtlcnMuZGV2Lw=="
 private const val REMOTE_ACCESS_KEY_URL = "https://raw.githubusercontent.com/atanuroy22/j/refs/heads/main/j"
 
 private val accessKeyHttpClient = OkHttpClient()
 
-private fun decodeCloudUrl(encoded: String): String =
-    String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
+private data class ServerCategoryCard(
+    val name: String,
+    val logo: String,
+    val entries: List<CloudServerEntry>
+)
 
 @Composable
 fun CloudHomeScreen(
     context: Context,
-    onServerSelected: (CloudServer) -> Unit,
+    onCategorySelected: (String, CloudServer?) -> Unit,
     onNavigate: (String) -> Unit
 ) {
     val preferenceManager = SkySharedPref.getInstance(context)
@@ -81,7 +78,9 @@ fun CloudHomeScreen(
     val scope = rememberCoroutineScope()
 
     var allServers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
-    var servers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
+    var visibleServers by remember { mutableStateOf<List<CloudServer>>(emptyList()) }
+    var categoryCards by remember { mutableStateOf<List<ServerCategoryCard>>(emptyList()) }
+    var entryByUrl by remember { mutableStateOf<Map<String, CloudServerEntry>>(emptyMap()) }
     var countdown by remember { mutableIntStateOf(5) }
     var isAutoopenActive by remember { mutableStateOf(false) }
     var autoopenConsumed by rememberSaveable { mutableStateOf(false) }
@@ -145,40 +144,10 @@ fun CloudHomeScreen(
     }
 
     LaunchedEffect(refreshTrigger) {
-        val jioServers = repository.fetchServers(decodeCloudUrl(CLOUD_SRC_A))
-        val zee5Servers = selectSdServerWithFallback(repository.fetchServers(decodeCloudUrl(CLOUD_SRC_B)))
-        val sonyServers = repository.fetchServers(decodeCloudUrl(CLOUD_SRC_C))
-        val sportsServers = repository.fetchServers(decodeCloudUrl(CLOUD_SRC_D))
-        
-        val freeJio = CloudServer(
-            name = "Free Jio",
-            url = "http://localhost:${preferenceManager.myPrefs.jtvGoServerPort}/playlist.m3u",
-            logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
-        )
-        val tataBingServer = CloudServer(
-            name = "Tata Bing",
-            url = decodeCloudUrl(CLOUD_SRC_F),
-            logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2022/01/95/61f1ed6874463.png"
-        )
-
-        val fancodeServer = CloudServer(
-            name = "Fancode Live",
-            url = decodeCloudUrl(CLOUD_SRC_E),
-            logo = "https://downloadr2.apkmirror.com/wp-content/uploads/2021/06/26/60d9761924e40.png"
-        )
-
-        val jioCrystalServer = CloudServer(
-            name = "Jio Crystal",
-            url = decodeCloudUrl(CLOUD_SRC_G),
-            logo = "https://yt3.googleusercontent.com/ytc/AIdro_lKULdxBE4H3HJlomG_vs3XMDk6FnCQA6zgO0EVZH5Kvg=s900-c-k-c0x00ffffff-no-rj"
-        )
-
-        // Reorder: Jio first, then Free Jio, then others. Hide Zee5 and Sports by default.
-        val baseList = if (isSubscribed) {
-            (jioServers + listOf(freeJio, fancodeServer) + zee5Servers + sonyServers + sportsServers + listOf(tataBingServer, jioCrystalServer)).distinctBy { it.url }
-        } else {
-            listOf(freeJio)
-        }
+        val catalog = fetchCloudServerCatalog(context, repository)
+        val entries = catalog.entries
+        entryByUrl = catalog.byUrl
+        val baseList = entries.map { it.server }.distinctBy { it.url }
 
         var currentHiddenUrls = hiddenServerUrls.toMutableList()
         
@@ -207,15 +176,27 @@ fun CloudHomeScreen(
             }
         }
         
-        val visibleServers = baseList.filter { it.url !in currentHiddenUrls }
-        allServers = baseList
-        servers = visibleServers
+        val visibleEntries = entries.filter { it.server.url !in currentHiddenUrls }
+        val visiblePlayableServers = visibleEntries
+            .filter { !it.isWebTv }
+            .map { it.server }
+        val orderedCategories = entries.map { it.category }.distinct()
+        val cards = orderedCategories.mapNotNull { category ->
+            val categoryEntries = visibleEntries.filter { it.category == category }
+            if (categoryEntries.isEmpty()) return@mapNotNull null
+            val logo = categoryEntries.firstOrNull { it.server.logo.isNotBlank() }?.server?.logo ?: ""
+            ServerCategoryCard(name = category, logo = logo, entries = categoryEntries)
+        }
 
-        if (visibleServers.isNotEmpty()) {
+        allServers = baseList
+        visibleServers = visiblePlayableServers
+        categoryCards = cards
+
+        if (visiblePlayableServers.isNotEmpty()) {
             val resolvedAutoopenUrl = when {
-                !isSubscribed -> freeJio.url
-                autoopenServerUrl != null && visibleServers.any { it.url == autoopenServerUrl } -> autoopenServerUrl
-                else -> visibleServers.first().url
+                !isSubscribed -> visiblePlayableServers.first().url
+                autoopenServerUrl != null && visiblePlayableServers.any { it.url == autoopenServerUrl } -> autoopenServerUrl
+                else -> visiblePlayableServers.first().url
             }
             if (autoopenServerUrl != resolvedAutoopenUrl) {
                 autoopenServerUrl = resolvedAutoopenUrl
@@ -225,8 +206,8 @@ fun CloudHomeScreen(
         }
     }
 
-    LaunchedEffect(autoopenDelaySeconds, servers, autoopenServerUrl, autoopenConsumed) {
-        if (!autoopenConsumed && autoopenDelaySeconds > 0 && servers.isNotEmpty()) {
+    LaunchedEffect(autoopenDelaySeconds, visibleServers, autoopenServerUrl, autoopenConsumed) {
+        if (!autoopenConsumed && autoopenDelaySeconds > 0 && visibleServers.isNotEmpty()) {
             isAutoopenActive = true
             countdown = autoopenDelaySeconds
             while (countdown > 0 && autoopenDelaySeconds > 0 && isAutoopenActive && !autoopenConsumed) {
@@ -239,15 +220,18 @@ fun CloudHomeScreen(
                 autoopenConsumed = true
                 val subscriptionActiveNow = preferenceManager.myPrefs.cloudSubExpiry > System.currentTimeMillis()
                 val target = if (subscriptionActiveNow) {
-                    servers.firstOrNull { it.url == autoopenServerUrl } ?: servers.firstOrNull()
+                    visibleServers.firstOrNull { it.url == autoopenServerUrl } ?: visibleServers.firstOrNull()
                 } else {
-                    servers.firstOrNull {
+                    visibleServers.firstOrNull {
                         it.name.contains("free jio", ignoreCase = true) ||
                             it.url.contains("localhost", ignoreCase = true) ||
                             it.url.contains("127.0.0.1")
-                    } ?: servers.firstOrNull()
+                    } ?: visibleServers.firstOrNull()
                 }
-                if (target != null) onServerSelected(target)
+                if (target != null) {
+                    val category = entryByUrl[target.url]?.category ?: "JioTV+"
+                    onCategorySelected(category, target)
+                }
             }
         } else {
             isAutoopenActive = false
@@ -256,7 +240,7 @@ fun CloudHomeScreen(
 
     LaunchedEffect(hiddenServerUrls, autoopenServerUrl) {
         if (autoopenServerUrl != null && autoopenServerUrl in hiddenServerUrls) {
-            autoopenServerUrl = servers.firstOrNull()?.url ?: autoopenServerUrl
+            autoopenServerUrl = visibleServers.firstOrNull()?.url ?: autoopenServerUrl
             preferenceManager.myPrefs.cloudAutoplayServerUrl = autoopenServerUrl
             preferenceManager.savePreferences()
         }
@@ -310,7 +294,7 @@ fun CloudHomeScreen(
                 modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
             )
 
-            if (servers.isEmpty()) {
+            if (categoryCards.isEmpty()) {
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = Color.Cyan)
@@ -334,15 +318,16 @@ fun CloudHomeScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.weight(1f).focusRequester(focusRequester)
                 ) {
-                    items(servers) { server ->
-                        val itemFocusRequester = serverFocusRequesters.getOrPut(server.url) { FocusRequester() }
+                    items(categoryCards) { card ->
+                        val itemFocusRequester = serverFocusRequesters.getOrPut(card.name) { FocusRequester() }
                         ServerCard(
-                            server = server,
+                            title = card.name,
+                            logoUrl = card.logo,
                             modifier = Modifier.focusRequester(itemFocusRequester),
                             onSelected = {
                                 isAutoopenActive = false
                                 autoopenConsumed = true
-                                onServerSelected(server)
+                                onCategorySelected(card.name, null)
                             }
                         )
                     }
@@ -354,7 +339,7 @@ fun CloudHomeScreen(
                 }
             }
 
-            if (isAutoopenActive && servers.isNotEmpty()) {
+            if (isAutoopenActive && visibleServers.isNotEmpty()) {
                 Text(
                     text = "Autoopen in $countdown... Any key or touch to cancel",
                     color = Color.White.copy(alpha = 0.7f),
@@ -459,7 +444,7 @@ fun CloudHomeScreen(
                             }
                         }
                     }
-                    val autoopenName = allServers.firstOrNull { it.url == autoopenServerUrl }?.name ?: servers.firstOrNull()?.name ?: ""
+                    val autoopenName = allServers.firstOrNull { it.url == autoopenServerUrl }?.name ?: visibleServers.firstOrNull()?.name ?: ""
                     val hiddenCount = hiddenServerUrls.size
                     Text(
                         text = "AutoOpen: $autoopenName | Hidden: $hiddenCount",
@@ -580,7 +565,7 @@ fun CloudHomeScreen(
                     ) {
                         Icon(Icons.Default.PlayCircle, null, tint = Color.Cyan, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(12.dp))
-                        val autoopenName = servers.firstOrNull { it.url == autoopenServerUrl }?.name ?: servers.firstOrNull()?.name ?: "Auto"
+                        val autoopenName = visibleServers.firstOrNull { it.url == autoopenServerUrl }?.name ?: visibleServers.firstOrNull()?.name ?: "Auto"
                         Text("Autoopen Server: $autoopenName", color = Color.White)
                     }
                     Row(
@@ -615,6 +600,7 @@ fun CloudHomeScreen(
                                 preferenceManager.myPrefs.cloudServerFilters = "{}"
                                 preferenceManager.myPrefs.cloudLanguageFilter = ""
                                 preferenceManager.myPrefs.cloudCategoryFilter = null
+                                preferenceManager.myPrefs.cloudShowAllServers = false
                                 preferenceManager.myPrefs.filterQX = null
                                 preferenceManager.savePreferences()
                                 autoopenServerUrl = null
@@ -674,7 +660,7 @@ fun CloudHomeScreen(
 }
 
     if (showAutoopenServerDialog) {
-        val optionPairs = servers.mapIndexed { index, server -> "${index + 1}. ${server.name}" to server.url }
+        val optionPairs = visibleServers.mapIndexed { index, server -> "${index + 1}. ${server.name}" to server.url }
         val optionLabels = optionPairs.map { it.first }
         val urlByLabel = optionPairs.toMap()
         val selectedLabel = optionPairs.firstOrNull { it.second == autoopenServerUrl }?.first
@@ -702,7 +688,8 @@ fun CloudHomeScreen(
 
 @Composable
 fun ServerCard(
-    server: CloudServer,
+    title: String,
+    logoUrl: String,
     modifier: Modifier = Modifier,
     onSelected: () -> Unit
 ) {
@@ -724,7 +711,7 @@ fun ServerCard(
             .padding(8.dp)
     ) {
         AsyncImage(
-            model = server.logo,
+            model = logoUrl,
             contentDescription = null,
             modifier = Modifier
                 .size(64.dp)
@@ -733,7 +720,7 @@ fun ServerCard(
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = server.name,
+            text = title,
             color = Color.White,
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp,

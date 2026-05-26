@@ -222,6 +222,7 @@ class SkySharedPref(context: Context) {
         @SharedPrefKey("cloud_autoplay_delay_seconds") var cloudAutoplayDelaySeconds: Int = 0,
         @SharedPrefKey("cloud_ui_scale") var cloudUiScale: Float = 1.0f,
         @SharedPrefKey("cloud_animation_enabled") var cloudAnimationEnabled: Boolean = true,
+        @SharedPrefKey("cloud_show_all_servers") var cloudShowAllServers: Boolean = false,
         @SharedPrefKey("cloud_access_key") var cloudAccessKey: String? = null,
 
 

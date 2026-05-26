@@ -34,6 +34,20 @@ class CloudRepository(private val context: Context) {
         }
     }
 
+    suspend fun fetchServerGroups(url: String): Map<String, List<CloudServer>> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder().url(url).build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use emptyMap()
+                val body = response.body?.string() ?: return@use emptyMap()
+                CloudParsers.parseServerGroups(gson, body)
+            }
+        } catch (e: Exception) {
+            Log.e("CloudRepository", "Error fetching server groups", e)
+            emptyMap()
+        }
+    }
+
     suspend fun fetchChannels(url: String, forceRefresh: Boolean = false): List<CloudChannel> =
         fetchChannelsInternal(url, forceRefresh, visited = mutableSetOf(), depth = 3)
 

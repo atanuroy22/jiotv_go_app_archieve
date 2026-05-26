@@ -37,19 +37,42 @@ object CloudParsers {
         val arr = findFirstJsonArray(root) ?: return emptyList()
         val mapped = arr.mapNotNull { el ->
             val obj = el.asJsonObjectOrNull() ?: return@mapNotNull null
-            val name = obj.firstStringOf("name", "title", "server", "label")
-                ?: obj.firstStringOf("server_name", "serverName")
-            val url = obj.firstStringOf("url", "link", "playlist", "playlist_url", "playlistUrl", "m3u", "m3u_url", "m3uUrl")
-                ?: obj.firstStringOf("base_url", "baseUrl", "endpoint")
-            val logo = obj.firstStringOf("logo", "icon", "image", "poster", "thumb", "thumbnail") ?: ""
-
-            val finalName = name?.trim().orEmpty()
-            val finalUrl = url?.trim().orEmpty()
-            if (finalName.isBlank() || finalUrl.isBlank()) return@mapNotNull null
-            CloudServer(name = finalName, url = finalUrl, logo = logo.trim())
+            parseServerObject(obj)
         }
 
         return mapped.distinctBy { it.url }
+    }
+
+    fun parseServerGroups(gson: Gson, body: String): Map<String, List<CloudServer>> {
+        val root = try {
+            JsonParser.parseString(body)
+        } catch (_: Exception) {
+            return emptyMap()
+        }
+
+        if (!root.isJsonObject) return emptyMap()
+        val obj = root.asJsonObject
+        val groups = linkedMapOf<String, List<CloudServer>>()
+
+        obj.entrySet().forEach { entry ->
+            val key = entry.key?.trim().orEmpty()
+            if (key.isBlank()) return@forEach
+            val value = entry.value
+            if (!value.isJsonArray) return@forEach
+            val servers = value.asJsonArray.mapNotNull { el ->
+                val serverObj = el.asJsonObjectOrNull() ?: return@mapNotNull null
+                parseServerObject(serverObj)
+            }.distinctBy { it.url }
+
+            if (servers.isNotEmpty()) {
+                groups[key] = servers
+            }
+        }
+
+        if (groups.isNotEmpty()) return groups
+
+        val direct = parseServerList(gson, body)
+        return if (direct.isNotEmpty()) mapOf("Servers" to direct) else emptyMap()
     }
 
     fun unwrapChannelContainer(value: Any?): List<*>? {
@@ -403,6 +426,19 @@ object CloudParsers {
     }
 
     private fun JsonElement.asJsonObjectOrNull(): JsonObject? = if (isJsonObject) asJsonObject else null
+
+    private fun parseServerObject(obj: JsonObject): CloudServer? {
+        val name = obj.firstStringOf("name", "title", "server", "label")
+            ?: obj.firstStringOf("server_name", "serverName")
+        val url = obj.firstStringOf("url", "link", "playlist", "playlist_url", "playlistUrl", "m3u", "m3u_url", "m3uUrl")
+            ?: obj.firstStringOf("base_url", "baseUrl", "endpoint")
+        val logo = obj.firstStringOf("logo", "icon", "image", "poster", "thumb", "thumbnail") ?: ""
+
+        val finalName = name?.trim().orEmpty()
+        val finalUrl = url?.trim().orEmpty()
+        if (finalName.isBlank() || finalUrl.isBlank()) return null
+        return CloudServer(name = finalName, url = finalUrl, logo = logo.trim())
+    }
 
     private fun JsonObject.firstStringOf(vararg keys: String): String? {
         for (key in keys) {
