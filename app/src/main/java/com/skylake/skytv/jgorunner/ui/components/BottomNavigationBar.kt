@@ -7,15 +7,19 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.DeveloperMode
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.foundation.focusable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 
 @Composable
@@ -62,10 +66,16 @@ fun BottomNavigationBar(
         else -> 0
     }
 
-    NavigationBar {
+    val focusRequesters = remember { List(items.size) { FocusRequester() } }
+
+    NavigationBar(
+        modifier = Modifier.focusGroup()
+    ) {
         items.forEachIndexed { index, item ->
             NavigationBarItem(
-                modifier = Modifier.focusable(),
+                modifier = Modifier
+                    .focusRequester(focusRequesters[index])
+                    .focusable(),
                 selected = selectedIndex == index,
                 onClick = {
                     setCurrentScreen(item.title)
