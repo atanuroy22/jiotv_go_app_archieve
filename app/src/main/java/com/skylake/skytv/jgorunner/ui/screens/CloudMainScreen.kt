@@ -78,6 +78,7 @@ fun CloudMainScreen(
     val gson = remember { Gson() }
 
     var currentServer by remember(initialServer) { mutableStateOf(initialServer) }
+    var userSelectedServer by remember { mutableStateOf(false) }
     var serverEntries by remember { mutableStateOf<List<CloudServerEntry>>(emptyList()) }
     var channels by remember { mutableStateOf<List<CloudChannel>>(emptyList()) }
     var isLoadingChannels by remember { mutableStateOf(false) }
@@ -181,11 +182,22 @@ fun CloudMainScreen(
         } else {
             filteredPlayableEntries
         }
-        val fallbackServer = categoryPlayableEntries.firstOrNull()?.server
-            ?: filteredPlayableEntries.firstOrNull()?.server
+        val fallbackWithinCategory = categoryPlayableEntries.firstOrNull()?.server
+        val anyFallback = filteredPlayableEntries.firstOrNull()?.server
         val activeUrl = currentServer?.url
-        if (activeUrl == null || activeUrl in effectiveHiddenServerUrls || filteredPlayableEntries.none { it.server.url == activeUrl }) {
-            currentServer = fallbackServer
+
+        val activeStillAvailable = activeUrl != null && visibleEntries.any { it.server.url == activeUrl }
+
+        if (!activeStillAvailable || activeUrl == null || activeUrl in effectiveHiddenServerUrls) {
+            // If there is a server available within the selected category, prefer that.
+            if (fallbackWithinCategory != null) {
+                currentServer = fallbackWithinCategory
+                userSelectedServer = false
+            } else if (!userSelectedServer) {
+                // Only fall back to any other server if user didn't explicitly select one.
+                currentServer = anyFallback
+            }
+            // If user selected a server and no category fallback exists, keep the chosen server locked.
         }
     }
 
@@ -340,6 +352,7 @@ fun CloudMainScreen(
                                                 context.startActivity(intent)
                                             } else {
                                                 currentServer = server
+                                                userSelectedServer = true
                                             }
                                         }
                                     )
