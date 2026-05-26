@@ -224,6 +224,7 @@ class SkySharedPref(context: Context) {
         @SharedPrefKey("cloud_animation_enabled") var cloudAnimationEnabled: Boolean = true,
         @SharedPrefKey("cloud_show_all_servers") var cloudShowAllServers: Boolean = false,
         @SharedPrefKey("cloud_access_key") var cloudAccessKey: String? = null,
+        @SharedPrefKey("cloud_access_key_valid") var cloudAccessKeyValid: Boolean = false,
 
 
         @SharedPrefKey("cloud_focus_anim_enabled") var cloudFocusAnimationEnabled: Boolean = true,
@@ -241,6 +242,7 @@ class SkySharedPref(context: Context) {
         @SharedPrefKey("cachedReleaseSize") var cachedReleaseSize: Long = 0L,
 
         @SharedPrefKey("cloud_sub_expiry") var cloudSubExpiry: Long = 0L,
+        @SharedPrefKey("cloud_last_key_validation") var cloudLastKeyValidation: Long = 0L,
 
         )
 

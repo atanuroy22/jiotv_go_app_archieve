@@ -36,6 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -59,6 +62,7 @@ import java.util.Locale
 private const val REMOTE_ACCESS_KEY_URL = "https://raw.githubusercontent.com/atanuroy22/j/refs/heads/main/j"
 
 private val accessKeyHttpClient = OkHttpClient()
+private const val KEY_VALIDATION_INTERVAL_MS = 30 * 60 * 1000L // 30 minutes
 
 private data class ServerCategoryCard(
     val name: String,
@@ -93,7 +97,9 @@ fun CloudHomeScreen(
     var refreshTrigger by remember { mutableIntStateOf(0) }
 
     val subExpiry = remember(refreshTrigger) { preferenceManager.myPrefs.cloudSubExpiry }
-    val isSubscribed = remember(subExpiry) { subExpiry > System.currentTimeMillis() }
+    val isSubscribed = remember(subExpiry, refreshTrigger) {
+        subExpiry > System.currentTimeMillis() && preferenceManager.myPrefs.cloudAccessKeyValid
+    }
 
     val hiddenServersJson = preferenceManager.myPrefs.cloudHiddenServerUrls ?: "[]"
     val hiddenServerUrls = remember(hiddenServersJson) {
@@ -112,19 +118,73 @@ fun CloudHomeScreen(
     val focusRequester = remember { FocusRequester() }
     val serverFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
 
-    LaunchedEffect(Unit) {
-        if (storedAccessKey.isBlank()) return@LaunchedEffect
+    suspend fun syncAccessKeyWithGithub() {
+        val now = System.currentTimeMillis()
+        val lastCheck = preferenceManager.myPrefs.cloudLastKeyValidation
+        if (lastCheck > 0 && (now - lastCheck) < KEY_VALIDATION_INTERVAL_MS) {
+            // Throttle: skip network validation if last check was within interval
+            return
+        }
+        if (storedAccessKey.isBlank()) {
+            if (preferenceManager.myPrefs.cloudAccessKeyValid) {
+                preferenceManager.myPrefs.cloudAccessKeyValid = false
+                preferenceManager.savePreferences()
+                refreshTrigger++
+            }
+            return
+        }
 
-        val remoteKeys = withContext(Dispatchers.IO) {
-            fetchRemoteAccessKeys()
+        var remoteKeys: Set<String>? = null
+        repeat(2) {
+            remoteKeys = withContext(Dispatchers.IO) {
+                fetchRemoteAccessKeys()
+            }
+            if (remoteKeys != null) return@repeat
+            delay(600)
         }
 
         if (remoteKeys != null && storedAccessKey !in remoteKeys) {
             preferenceManager.myPrefs.cloudAccessKey = null
             preferenceManager.myPrefs.cloudSubExpiry = 0L
+            preferenceManager.myPrefs.cloudAccessKeyValid = false
             preferenceManager.savePreferences()
             refreshTrigger++
             Toast.makeText(context, "Access key removed", Toast.LENGTH_SHORT).show()
+        } else if (remoteKeys != null && storedAccessKey in remoteKeys) {
+            if (!preferenceManager.myPrefs.cloudAccessKeyValid) {
+                preferenceManager.myPrefs.cloudAccessKeyValid = true
+                preferenceManager.savePreferences()
+                refreshTrigger++
+            }
+        } else {
+            if (preferenceManager.myPrefs.cloudAccessKeyValid) {
+                preferenceManager.myPrefs.cloudAccessKeyValid = false
+                preferenceManager.savePreferences()
+                refreshTrigger++
+            }
+        }
+        // Update last validation timestamp to avoid frequent network checks
+        preferenceManager.myPrefs.cloudLastKeyValidation = System.currentTimeMillis()
+        preferenceManager.savePreferences()
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, storedAccessKey) {
+        scope.launch {
+            syncAccessKeyWithGithub()
+        }
+
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                scope.launch {
+                    syncAccessKeyWithGithub()
+                }
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 

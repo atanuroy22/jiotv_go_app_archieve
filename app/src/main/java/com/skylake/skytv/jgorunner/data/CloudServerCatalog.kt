@@ -28,7 +28,8 @@ data class CloudServerCatalog(
 
 suspend fun fetchCloudServerCatalog(context: Context, repository: CloudRepository): CloudServerCatalog {
     val preferenceManager = SkySharedPref.getInstance(context)
-    val isSubscribed = preferenceManager.myPrefs.cloudSubExpiry > System.currentTimeMillis()
+    val isSubscribed = preferenceManager.myPrefs.cloudSubExpiry > System.currentTimeMillis() &&
+        preferenceManager.myPrefs.cloudAccessKeyValid
 
     val catalogByCategory = linkedMapOf<String, LinkedHashMap<String, CloudServerEntry>>()
     val categoryKeyByLower = mutableMapOf<String, String>()
@@ -45,7 +46,9 @@ suspend fun fetchCloudServerCatalog(context: Context, repository: CloudRepositor
         val bucket = catalogByCategory.getOrPut(key) { linkedMapOf() }
         servers.forEach { server ->
             if (server.url.isBlank() || server.name.isBlank()) return@forEach
-            bucket.putIfAbsent(server.url, CloudServerEntry(server, key, isWebTv))
+            if (!bucket.containsKey(server.url)) {
+                bucket[server.url] = CloudServerEntry(server, key, isWebTv)
+            }
         }
     }
 
