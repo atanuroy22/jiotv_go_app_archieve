@@ -116,12 +116,8 @@ fun CloudMainScreen(
         serverEntries.associateBy { it.server.url }
     }
 
-    val visibleEntries = remember(serverEntries, effectiveHiddenServerUrls, showAllServers) {
-        if (showAllServers) {
-            serverEntries
-        } else {
-            serverEntries.filter { it.server.url !in effectiveHiddenServerUrls }
-        }
+    val visibleEntries = remember(serverEntries, effectiveHiddenServerUrls) {
+        serverEntries.filter { it.server.url !in effectiveHiddenServerUrls }
     }
 
     val sidebarEntries = remember(visibleEntries, showAllServers, selectedCategory) {
@@ -192,7 +188,7 @@ fun CloudMainScreen(
 
         val activeStillAvailable = activeUrl != null && visibleEntries.any { it.server.url == activeUrl }
 
-        if (!activeStillAvailable || activeUrl == null) {
+        if (!activeStillAvailable) {
             // If there is a server available within the selected category, prefer that.
             if (fallbackWithinCategory != null) {
                 currentServer = fallbackWithinCategory
