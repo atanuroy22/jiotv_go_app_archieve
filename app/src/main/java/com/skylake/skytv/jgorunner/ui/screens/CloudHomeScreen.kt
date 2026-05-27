@@ -208,6 +208,10 @@ fun CloudHomeScreen(
         val entries = catalog.entries
         entryByUrl = catalog.byUrl
         val baseList = entries.map { it.server }.distinctBy { it.url }
+        val sportsUrls = entries
+            .filter { it.category.contains("sport", ignoreCase = true) }
+            .map { it.server.url }
+            .toSet()
 
         var currentHiddenUrls = hiddenServerUrls.toMutableList()
         
@@ -220,12 +224,12 @@ fun CloudHomeScreen(
                     val isJio = server.name.contains("jio", ignoreCase = true) && !server.name.contains("sony", ignoreCase = true)
                     val isSonyIn = server.name.contains("sony", ignoreCase = true) && server.name.contains("in", ignoreCase = true)
                     val isSlow = server.name.contains("slow", ignoreCase = true)
-                    val isFancode = server.name.contains("fancode", ignoreCase = true)
                     val isZeeSd = server.name.contains("zee", ignoreCase = true) &&
                         server.name.contains("sd", ignoreCase = true)
                     val isTataBing = server.name.contains("tata bing", ignoreCase = true)
                     val isJioCrystal = server.name.contains("jio crystal", ignoreCase = true)
-                    !(isJio || isSonyIn || isFancode || isZeeSd || isTataBing || isJioCrystal) || (isSlow && !isJio)
+                    val isSportsServer = server.url in sportsUrls
+                    !(isJio || isSonyIn || isZeeSd || isTataBing || isJioCrystal || isSportsServer) || (isSlow && !isJio)
                 }
                 .map { it.url }
                 .toMutableList()

@@ -220,7 +220,7 @@ class SkySharedPref(context: Context) {
         @SharedPrefKey("cloud_hidden_server_urls") var cloudHiddenServerUrls: String? = "[]",
         @SharedPrefKey("cloud_autoplay_server_url") var cloudAutoplayServerUrl: String? = null,
         @SharedPrefKey("cloud_autoplay_delay_seconds") var cloudAutoplayDelaySeconds: Int = 15,
-        @SharedPrefKey("webui_blocking_mode") var webUiBlockingMode: String? = "little",
+        @SharedPrefKey("webui_blocking_mode") var webUiBlockingMode: String? = "none",
         @SharedPrefKey("cloud_ui_scale") var cloudUiScale: Float = 1.0f,
         @SharedPrefKey("cloud_animation_enabled") var cloudAnimationEnabled: Boolean = true,
         @SharedPrefKey("cloud_show_all_servers") var cloudShowAllServers: Boolean = false,

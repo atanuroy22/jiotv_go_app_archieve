@@ -7,7 +7,6 @@ import java.util.Locale
 private const val JIO_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9qaW90disuanNvbg=="
 private const val ZEE5_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC96ZWU1Lmpzb24="
 private const val SONY_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zb255Lmpzb24="
-private const val SPORTS_SERVER_LIST_URL_ENC = "aHR0cHM6Ly9jbG91ZHBsYXktYXBwLWpzb24ucGFnZXMuZGV2L2NhdC9zcG9ydHMuanNvbg=="
 private const val FANCODE_SERVER_URL_ENC = "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2RybWxpdmUvZmFuY29kZS1saXZlLWV2ZW50cy9tYWluL2ZhbmNvZGUuanNvbg=="
 private const val SERVER_GROUPS_URL = "https://raw.githubusercontent.com/atanuroy22/j/refs/heads/main/server.json"
 
@@ -67,7 +66,6 @@ suspend fun fetchCloudServerCatalog(context: Context, repository: CloudRepositor
     val jioServers = repository.fetchServers(decodeUrl(JIO_SERVER_LIST_URL_ENC))
     val zee5Servers = selectSdServerWithFallback(repository.fetchServers(decodeUrl(ZEE5_SERVER_LIST_URL_ENC)))
     val sonyServers = repository.fetchServers(decodeUrl(SONY_SERVER_LIST_URL_ENC))
-    val sportsServers = repository.fetchServers(decodeUrl(SPORTS_SERVER_LIST_URL_ENC))
 
     val fancodeServer = CloudServer(
         name = "Fancode Live",
@@ -78,7 +76,7 @@ suspend fun fetchCloudServerCatalog(context: Context, repository: CloudRepositor
     addServers("JioTV+", jioServers + freeJio, false)
     addServers("Zee5", zee5Servers, false)
     addServers("Sony", sonyServers, false)
-    addServers("Sports", sportsServers + fancodeServer, false)
+    addServers("Sports", listOf(fancodeServer), false)
 
     val dynamicGroups = repository.fetchServerGroups(SERVER_GROUPS_URL)
     dynamicGroups.forEach { (category, servers) ->

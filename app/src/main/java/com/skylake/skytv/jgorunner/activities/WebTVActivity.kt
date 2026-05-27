@@ -43,13 +43,15 @@ class WebPlayerActivity : ComponentActivity() {
 
         companion object {
             fun fromPref(raw: String?): WebUiBlockingMode =
-                entries.firstOrNull { it.prefValue.equals(raw, ignoreCase = true) } ?: LITTLE
+                entries.firstOrNull { it.prefValue.equals(raw, ignoreCase = true) } ?: NONE
         }
     }
 
     private var webView: WebView? = null
     private var loadingSpinner: ProgressBar? = null
     private var blockModeSpinner: Spinner? = null
+    private var blockModeContainer: View? = null
+    private var blockModeDivider: View? = null
     private var url: String? = null
 
     private var channelNumbers: List<String>? = null
@@ -59,7 +61,7 @@ class WebPlayerActivity : ComponentActivity() {
     private var currentLogoUrl: String? = null
     private var currentChannelName: String? = null
     private var targetChannelId: String? = null
-    private var webUiBlockingMode: WebUiBlockingMode = WebUiBlockingMode.LITTLE
+    private var webUiBlockingMode: WebUiBlockingMode = WebUiBlockingMode.NONE
 
     private val recentChannels: MutableList<Channel> = ArrayList()
 
@@ -134,9 +136,12 @@ class WebPlayerActivity : ComponentActivity() {
         webView = findViewById(R.id.webview)
         loadingSpinner = findViewById(R.id.loading_spinner)
         blockModeSpinner = findViewById(R.id.block_mode_spinner)
+        blockModeContainer = findViewById(R.id.block_mode_container)
+        blockModeDivider = findViewById(R.id.block_mode_divider)
 
         webUiBlockingMode = WebUiBlockingMode.fromPref(prefManager.myPrefs.webUiBlockingMode)
         setupBlockingModeSpinner()
+        updateBlockingUiVisibility(false)
 
         setupWebView()
         loadUrl()
@@ -156,6 +161,12 @@ class WebPlayerActivity : ComponentActivity() {
                             webView!!.loadUrl(initURL!!)
                         } else {
                             webView!!.goBack()
+                        }
+                    } else if (webUiBlockingMode == WebUiBlockingMode.NONE) {
+                        if (!initURL.isNullOrBlank() && !currentUrl.isNullOrBlank() && !currentUrl.equals(initURL, ignoreCase = true)) {
+                            webView!!.loadUrl(initURL!!)
+                        } else {
+                            finish()
                         }
                     } else if (webView!!.canGoBack()) {
                         playerUrlCount++
@@ -443,7 +454,7 @@ class WebPlayerActivity : ComponentActivity() {
         spinner.setSelection(WebUiBlockingMode.entries.indexOf(webUiBlockingMode).coerceAtLeast(0))
         spinner.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>, view: View?, position: Int, id: Long) {
-                val selectedMode = WebUiBlockingMode.entries.getOrNull(position) ?: WebUiBlockingMode.LITTLE
+                val selectedMode = WebUiBlockingMode.entries.getOrNull(position) ?: WebUiBlockingMode.NONE
                 if (selectedMode != webUiBlockingMode) {
                     webUiBlockingMode = selectedMode
                     prefManager.myPrefs.webUiBlockingMode = selectedMode.prefValue
@@ -473,7 +484,7 @@ class WebPlayerActivity : ComponentActivity() {
         val mode = webUiBlockingMode
         if (mode == WebUiBlockingMode.NONE) return false
 
-        if (mode == WebUiBlockingMode.AGGRESSIVE && isAdRedirectUrl(rawUrl)) {
+        if (isAdRedirectUrl(rawUrl)) {
             return true
         }
 
@@ -490,13 +501,17 @@ class WebPlayerActivity : ComponentActivity() {
                 rawUrl.contains(".mpd", ignoreCase = true) ||
                 rawUrl.contains("/play/", ignoreCase = true)
 
-        if (mode == WebUiBlockingMode.LITTLE && rawUrl.contains("jtvxweb", ignoreCase = true) &&
-            (rawUrl.contains("doubleclick", ignoreCase = true) || rawUrl.contains("pop-under", ignoreCase = true))
-        ) {
-            return true
+        if (mode == WebUiBlockingMode.LITTLE) {
+            return false
         }
 
         return !isAllowedRoute
+    }
+
+    private fun updateBlockingUiVisibility(isPlaying: Boolean) {
+        val visibility = if (isPlaying) View.GONE else View.VISIBLE
+        blockModeContainer?.visibility = visibility
+        blockModeDivider?.visibility = visibility
     }
 
     private fun loadUrl() {
@@ -723,11 +738,13 @@ class WebPlayerActivity : ComponentActivity() {
                 setDarkTheme()
             }
             loadingSpinner!!.visibility = View.VISIBLE
+            updateBlockingUiVisibility(isPlayerLikeUrl(url))
         }
 
         override fun onPageFinished(view: WebView, url: String) {
             loadingSpinner!!.visibility = View.GONE
             val isPlayer = isPlayerLikeUrl(url)
+            updateBlockingUiVisibility(isPlayer)
 
             if (isAvengersWebUiUrl(url)) {
                 view.evaluateJavascript(
