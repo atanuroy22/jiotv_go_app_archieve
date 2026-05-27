@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
+import android.widget.ArrayAdapter
 import android.webkit.ConsoleMessage
 import android.webkit.PermissionRequest
 import android.view.WindowInsets
@@ -17,6 +18,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ProgressBar
+import android.widget.Spinner
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.core.view.WindowCompat
@@ -34,8 +36,20 @@ class WebPlayerActivity : ComponentActivity() {
         private const val DEFAULT_URL_TEMPLATE = "http://localhost:%d"
     }
 
+    private enum class WebUiBlockingMode(val prefValue: String, val label: String) {
+        NONE("none", "No blocking"),
+        LITTLE("little", "Little blocking"),
+        AGGRESSIVE("aggressive", "Aggressive blocking");
+
+        companion object {
+            fun fromPref(raw: String?): WebUiBlockingMode =
+                entries.firstOrNull { it.prefValue.equals(raw, ignoreCase = true) } ?: LITTLE
+        }
+    }
+
     private var webView: WebView? = null
     private var loadingSpinner: ProgressBar? = null
+    private var blockModeSpinner: Spinner? = null
     private var url: String? = null
 
     private var channelNumbers: List<String>? = null
@@ -45,6 +59,7 @@ class WebPlayerActivity : ComponentActivity() {
     private var currentLogoUrl: String? = null
     private var currentChannelName: String? = null
     private var targetChannelId: String? = null
+    private var webUiBlockingMode: WebUiBlockingMode = WebUiBlockingMode.LITTLE
 
     private val recentChannels: MutableList<Channel> = ArrayList()
 
@@ -118,6 +133,10 @@ class WebPlayerActivity : ComponentActivity() {
 
         webView = findViewById(R.id.webview)
         loadingSpinner = findViewById(R.id.loading_spinner)
+        blockModeSpinner = findViewById(R.id.block_mode_spinner)
+
+        webUiBlockingMode = WebUiBlockingMode.fromPref(prefManager.myPrefs.webUiBlockingMode)
+        setupBlockingModeSpinner()
 
         setupWebView()
         loadUrl()
@@ -414,6 +433,72 @@ class WebPlayerActivity : ComponentActivity() {
         }
     }
 
+    private fun setupBlockingModeSpinner() {
+        val spinner = blockModeSpinner ?: return
+        val items = WebUiBlockingMode.entries.map { it.label }
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, items).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        spinner.adapter = adapter
+        spinner.setSelection(WebUiBlockingMode.entries.indexOf(webUiBlockingMode).coerceAtLeast(0))
+        spinner.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>, view: View?, position: Int, id: Long) {
+                val selectedMode = WebUiBlockingMode.entries.getOrNull(position) ?: WebUiBlockingMode.LITTLE
+                if (selectedMode != webUiBlockingMode) {
+                    webUiBlockingMode = selectedMode
+                    prefManager.myPrefs.webUiBlockingMode = selectedMode.prefValue
+                    prefManager.savePreferences()
+                }
+            }
+
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>) = Unit
+        })
+    }
+
+    private fun isAdRedirectUrl(rawUrl: String): Boolean {
+        val value = rawUrl.lowercase(Locale.getDefault())
+        return value.contains("doubleclick") ||
+            value.contains("googlesyndication") ||
+            value.contains("googleadservices") ||
+            value.contains("adservice") ||
+            value.contains("taboola") ||
+            value.contains("outbrain") ||
+            value.contains("pop-under") ||
+            value.contains("popunder") ||
+            value.contains("adsystem") ||
+            value.contains("adserver")
+    }
+
+    private fun shouldBlockWebUiUrl(rawUrl: String): Boolean {
+        val mode = webUiBlockingMode
+        if (mode == WebUiBlockingMode.NONE) return false
+
+        if (mode == WebUiBlockingMode.AGGRESSIVE && isAdRedirectUrl(rawUrl)) {
+            return true
+        }
+
+        val isAllowedRoute =
+            rawUrl.contains("localhost", ignoreCase = true) ||
+                rawUrl.contains("allinonereborn.online/tplay/", ignoreCase = true) ||
+                rawUrl.contains("mini.allinonereborn.fun/tplay/", ignoreCase = true) ||
+                rawUrl.contains("avengers-web.hakunamata.workers.dev", ignoreCase = true) ||
+                rawUrl.contains("avengers-iptv-web.hakunamata.workers.dev", ignoreCase = true) ||
+                rawUrl.contains("jtvxweb.pages.dev", ignoreCase = true) ||
+                rawUrl.contains("/pind", ignoreCase = true) ||
+                rawUrl.contains("/player/", ignoreCase = true) ||
+                rawUrl.contains("/mpd/", ignoreCase = true) ||
+                rawUrl.contains(".mpd", ignoreCase = true) ||
+                rawUrl.contains("/play/", ignoreCase = true)
+
+        if (mode == WebUiBlockingMode.LITTLE && rawUrl.contains("jtvxweb", ignoreCase = true) &&
+            (rawUrl.contains("doubleclick", ignoreCase = true) || rawUrl.contains("pop-under", ignoreCase = true))
+        ) {
+            return true
+        }
+
+        return !isAllowedRoute
+    }
+
     private fun loadUrl() {
         if (url != null) {
             webView!!.loadUrl(url!!)
@@ -589,30 +674,12 @@ class WebPlayerActivity : ComponentActivity() {
     private inner class CustomWebViewClient : WebViewClient() {
         @Deprecated("Deprecated in Java")
         override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
-            val isAllowedRoute =
-                url.contains("localhost", ignoreCase = true) ||
-                    url.contains("allinonereborn.online/tplay/", ignoreCase = true) ||
-                    url.contains("mini.allinonereborn.fun/tplay/", ignoreCase = true) ||
-                    url.contains("avengers-web.hakunamata.workers.dev", ignoreCase = true) ||
-                    url.contains("avengers-iptv-web.hakunamata.workers.dev", ignoreCase = true) ||
-                    url.contains("jtvxweb.pages.dev", ignoreCase = true) ||
-                    url.contains("/pind", ignoreCase = true) ||
-                    url.contains("/player/", ignoreCase = true) ||
-                    url.contains("/mpd/", ignoreCase = true) ||
-                    url.contains(".mpd", ignoreCase = true) ||
-                    url.contains("/play/", ignoreCase = true)
-
-            // Block only aggressive pop-under and ad-specific domains that cause white screens
-            if (url.contains("jtvxweb", ignoreCase = true) || url.contains("/pind", ignoreCase = true)) {
-                if (url.contains("doubleclick", ignoreCase = true) || url.contains("pop-under", ignoreCase = true)) {
-                    Log.d(TAG, "Blocked Aggressive Ad Redirect: $url")
-                    return true
+            if (shouldBlockWebUiUrl(url)) {
+                if (webUiBlockingMode == WebUiBlockingMode.NONE) {
+                    return false
                 }
-            }
-
-            if (!isAllowedRoute) {
-                Log.d(TAG, "Blocked non-player navigation: $url")
-            return true
+                Log.d(TAG, "Blocked Web UI redirect ($webUiBlockingMode): $url")
+                return true
             }
 
             val isDrmLikeUrl = url.contains("/play/", ignoreCase = true) ||
