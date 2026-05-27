@@ -481,6 +481,18 @@ class WebPlayerActivity : ComponentActivity() {
     }
 
     private fun shouldBlockWebUiUrl(rawUrl: String): Boolean {
+        val normalized = rawUrl.lowercase(Locale.getDefault())
+        if (normalized.startsWith("tg://") ||
+            normalized.contains("telegram.org") ||
+            normalized.contains("telegram.me") ||
+            normalized.contains("web.telegram.org") ||
+            normalized.contains("t.me/") ||
+            normalized.contains("t.me?") ||
+            normalized.contains("telegram://")
+        ) {
+            return true
+        }
+
         val mode = webUiBlockingMode
         if (mode == WebUiBlockingMode.NONE) return false
 
