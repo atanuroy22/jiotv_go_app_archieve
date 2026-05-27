@@ -177,12 +177,12 @@ fun CloudMainScreen(
             return@LaunchedEffect
         }
         val filteredPlayableEntries = visibleEntries.filter { !it.isWebTv }
-        val categoryPlayableEntries = if (!selectedCategory.isNullOrBlank()) {
-            filteredPlayableEntries.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+        val categoryEntries = if (!selectedCategory.isNullOrBlank()) {
+            visibleEntries.filter { it.category.equals(selectedCategory, ignoreCase = true) }
         } else {
-            filteredPlayableEntries
+            visibleEntries
         }
-        val fallbackWithinCategory = categoryPlayableEntries.firstOrNull()?.server
+        val fallbackWithinCategory = categoryEntries.firstOrNull()?.server
         val anyFallback = filteredPlayableEntries.firstOrNull()?.server
         val activeUrl = currentServer?.url
 
@@ -222,6 +222,16 @@ fun CloudMainScreen(
             channels = emptyList()
             isLoadingChannels = true
             errorMessage = null
+
+            val isWebTvServer = entryByUrl[server.url]?.isWebTv == true
+            if (isWebTvServer) {
+                isLoadingChannels = false
+                val intent = Intent(context, WebPlayerActivity::class.java).apply {
+                    putExtra("startup_url", server.url)
+                }
+                context.startActivity(intent)
+                return@let
+            }
 
             var retryCount = 0
             val isLocal = server.url.contains("localhost") || server.url.contains("127.0.0.1")
