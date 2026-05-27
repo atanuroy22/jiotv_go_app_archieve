@@ -209,7 +209,7 @@ class SkySharedPref(context: Context) {
         @SharedPrefKey("setupPending") var setupPending: Boolean = true,
         @SharedPrefKey("enable_pip") var enablePip: Boolean = false,
 
-        @SharedPrefKey("cloud_autoplay_first") var cloudAutoplayFirstChannel: Boolean = false,
+        @SharedPrefKey("cloud_autoplay_first") var cloudAutoplayFirstChannel: Boolean = true,
         @SharedPrefKey("cloud_autoplay_last") var cloudAutoplayLastChannel: Boolean = true,
         @SharedPrefKey("last_cloud_server_url") var lastCloudServerUrl: String? = null,
         @SharedPrefKey("last_cloud_server_name") var lastCloudServerName: String? = null,
@@ -219,7 +219,7 @@ class SkySharedPref(context: Context) {
         @SharedPrefKey("cloud_server_filters") var cloudServerFilters: String? = "{}",
         @SharedPrefKey("cloud_hidden_server_urls") var cloudHiddenServerUrls: String? = "[]",
         @SharedPrefKey("cloud_autoplay_server_url") var cloudAutoplayServerUrl: String? = null,
-        @SharedPrefKey("cloud_autoplay_delay_seconds") var cloudAutoplayDelaySeconds: Int = 0,
+        @SharedPrefKey("cloud_autoplay_delay_seconds") var cloudAutoplayDelaySeconds: Int = 15,
         @SharedPrefKey("cloud_ui_scale") var cloudUiScale: Float = 1.0f,
         @SharedPrefKey("cloud_animation_enabled") var cloudAnimationEnabled: Boolean = true,
         @SharedPrefKey("cloud_show_all_servers") var cloudShowAllServers: Boolean = false,

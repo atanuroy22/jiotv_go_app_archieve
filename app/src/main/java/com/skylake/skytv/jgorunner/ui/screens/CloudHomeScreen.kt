@@ -647,9 +647,9 @@ fun CloudHomeScreen(
                             .clickable {
                                 preferenceManager.myPrefs.cloudHiddenServerUrls = "[]"
                                 preferenceManager.myPrefs.cloudAutoplayServerUrl = null
-                                preferenceManager.myPrefs.cloudAutoplayDelaySeconds = 0
-                                preferenceManager.myPrefs.cloudAutoplayFirstChannel = false
-                                preferenceManager.myPrefs.cloudAutoplayLastChannel = false
+                                preferenceManager.myPrefs.cloudAutoplayDelaySeconds = 15
+                                preferenceManager.myPrefs.cloudAutoplayFirstChannel = true
+                                preferenceManager.myPrefs.cloudAutoplayLastChannel = true
                                 preferenceManager.myPrefs.lastCloudPlayedChannelId = null
                                 preferenceManager.myPrefs.lastCloudServerUrl = null
                                 preferenceManager.myPrefs.lastCloudServerName = null
@@ -664,7 +664,7 @@ fun CloudHomeScreen(
                                 preferenceManager.myPrefs.filterQX = null
                                 preferenceManager.savePreferences()
                                 autoopenServerUrl = null
-                                autoopenDelaySeconds = 0
+                                autoopenDelaySeconds = 15
                                 autoopenConsumed = false
                                 showSettingsPanel = false
                                 refreshTrigger++
