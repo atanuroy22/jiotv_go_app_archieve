@@ -3,9 +3,11 @@ package com.skylake.skytv.jgorunner.ui.components
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeveloperMode
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.DeveloperMode
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
@@ -43,6 +45,13 @@ fun BottomNavigationBar(
             label = "Jio"
         ),
         BottomNavigationItem(
+            title = "TataHome",
+            selectedIcon = Icons.Filled.Public,
+            unselectedIcon = Icons.Outlined.Public,
+            hasNews = false,
+            label = "Tata"
+        ),
+        BottomNavigationItem(
             title = "Settings",
             selectedIcon = Icons.Filled.Settings,
             unselectedIcon = Icons.Outlined.Settings,
@@ -61,8 +70,9 @@ fun BottomNavigationBar(
     val selectedIndex = when (currentScreen) {
         "CloudHome", "CloudMain" -> 0
         "JioHome" -> 1
-        "Settings", "SettingsTV" -> 2
-        "Debug" -> 3
+        "TataHome" -> 2
+        "Settings", "SettingsTV" -> 3
+        "Debug" -> 4
         else -> 0
     }
 

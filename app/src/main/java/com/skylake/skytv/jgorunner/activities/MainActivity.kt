@@ -291,6 +291,10 @@ class MainActivity : ComponentActivity() {
                                 onCloudPlayButtonClick = { currentScreen = "CloudHome" },
                                 onExitButtonClick = { finishAffinity() }
                             )
+                            "TataHome" -> TataHomeScreen(
+                                context = this@MainActivity,
+                                onNavigate = { currentScreen = it }
+                            )
                             "Settings" -> SettingsScreen(
                                 activity = this@MainActivity,
                                 checkForUpdates = { checkForUpdates(true) },
@@ -404,7 +408,7 @@ class MainActivity : ComponentActivity() {
     private val backPressedCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
             when (currentScreen) {
-                "Settings", "Debug", "Info", "JioHome" -> currentScreen = "CloudHome"
+                "Settings", "Debug", "Info", "JioHome", "TataHome" -> currentScreen = "CloudHome"
                 "CloudMain" -> currentScreen = "CloudHome"
                 "Runner", "Login", "Zone" -> currentScreen = "Debug"
                 else -> { isEnabled = false; onBackPressedDispatcher.onBackPressed() }

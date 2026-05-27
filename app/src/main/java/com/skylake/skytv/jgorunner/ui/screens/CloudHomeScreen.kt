@@ -219,17 +219,19 @@ fun CloudHomeScreen(
         if (hiddenServerUrls.isEmpty() && isSubscribed && baseList.isNotEmpty()) {
             currentHiddenUrls = baseList
                 .filter { server ->
-                    // Keep JioTV+, Free Jio, Sony (IN), Tata Bing, and Jio Crystal visible.
+                    // Keep JioTV+, Free Jio, Sony (IN), Tata Play, Tata Bing, and Jio Crystal visible.
                     // Hide everything else and slow/unresponsive servers.
                     val isJio = server.name.contains("jio", ignoreCase = true) && !server.name.contains("sony", ignoreCase = true)
                     val isSonyIn = server.name.contains("sony", ignoreCase = true) && server.name.contains("in", ignoreCase = true)
                     val isSlow = server.name.contains("slow", ignoreCase = true)
                     val isZeeSd = server.name.contains("zee", ignoreCase = true) &&
                         server.name.contains("sd", ignoreCase = true)
+                    val isTataPlay = server.name.contains("tata play", ignoreCase = true) ||
+                        server.url.contains("tataplay", ignoreCase = true)
                     val isTataBing = server.name.contains("tata bing", ignoreCase = true)
                     val isJioCrystal = server.name.contains("jio crystal", ignoreCase = true)
                     val isSportsServer = server.url in sportsUrls
-                    !(isJio || isSonyIn || isZeeSd || isTataBing || isJioCrystal || isSportsServer) || (isSlow && !isJio)
+                    !(isJio || isSonyIn || isZeeSd || isTataPlay || isTataBing || isJioCrystal || isSportsServer) || (isSlow && !isJio)
                 }
                 .map { it.url }
                 .toMutableList()

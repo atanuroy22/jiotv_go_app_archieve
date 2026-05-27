@@ -57,6 +57,19 @@ suspend fun fetchCloudServerCatalog(context: Context, repository: CloudRepositor
         logo = "https://raw.githubusercontent.com/atanuroy22/jiotv_go_app/develop/pic/jiotv.jpg"
     )
 
+    val tataPlayPlaylistUrl = preferenceManager.myPrefs.tataPlayPlaylistUrl
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?: "http://localhost:8000/tataplay/playlist.php"
+
+    val tataPlayServer = CloudServer(
+        name = "Tata Play",
+        url = tataPlayPlaylistUrl,
+        logo = ""
+    )
+
+    addServers("Tata Play", listOf(tataPlayServer), false)
+
     if (!isSubscribed) {
         addServers("JioTV+", listOf(freeJio), false)
         val entries = catalogByCategory.values.flatMap { it.values }
