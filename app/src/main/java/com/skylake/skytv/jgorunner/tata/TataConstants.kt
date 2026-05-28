@@ -10,6 +10,7 @@ internal object TataConstants {
     const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
     const val AES_KEY = "aesEncryptionKey"
     const val ORIGIN_API = "https://tp.drmlive-01.workers.dev/origin"
+    const val FALLBACK_ORIGIN_API = "https://raw.githubusercontent.com/yuvraj490/tataplay-web/main/data.json"
     const val STB_ONLY_API = "https://tp.drmlive-01.workers.dev/stb_only"
     const val SECURE_KID_API = "https://tp.secure-kid.workers.dev/"
     const val CONTENT_API_PREFIX = "https://tb.tapi.videoready.tv/content-detail/api/partner/cdn/player/details/chotiluli/"

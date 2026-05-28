@@ -57,6 +57,7 @@ class TataServerService : Service() {
 
     private var server: TataHttpServer? = null
     private var updateJob: Job? = null
+    private val serverLock = Any()
 
     override fun onCreate() {
         super.onCreate()
@@ -89,17 +90,24 @@ class TataServerService : Service() {
         }
 
         CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val result = TataBundleManager.ensureBundleReady(this@TataServerService, log = LogCollector::log)
-                val root = result.rootDir
-                val port = prefs.myPrefs.tataServerPort.takeIf { it in 1..65535 } ?: TataConstants.DEFAULT_PORT
-                server = TataHttpServer(root, port)
-                server?.start()
-                LogCollector.log("Tata server started on port $port")
-                startUpdateLoop()
-            } catch (e: Exception) {
-                LogCollector.log("Tata server start failed: ${e.message}")
-                stopServer()
+            synchronized(serverLock) {
+                if (server != null) return@launch
+                try {
+                    val result = TataBundleManager.ensureBundleReady(this@TataServerService, log = LogCollector::log)
+                    val root = result.rootDir
+                    val port = prefs.myPrefs.tataServerPort.takeIf { it in 1..65535 } ?: TataConstants.DEFAULT_PORT
+
+                    // Small delay to ensure port is released if just stopped
+                    delay(1000)
+
+                    server = TataHttpServer(root, port)
+                    server?.start()
+                    LogCollector.log("Tata server started on port $port")
+                    startUpdateLoop()
+                } catch (e: Exception) {
+                    LogCollector.log("Tata server start failed: ${e.message}")
+                    stopServer()
+                }
             }
         }
 
@@ -108,15 +116,18 @@ class TataServerService : Service() {
 
     private fun restartServer(forceUpdate: Boolean) {
         CoroutineScope(Dispatchers.IO).launch {
-            stopServer()
-            val result = TataBundleManager.ensureBundleReady(this@TataServerService, forceUpdate, LogCollector::log)
-            val root = result.rootDir
-            val prefs = SkySharedPref.getInstance(this@TataServerService)
-            val port = prefs.myPrefs.tataServerPort.takeIf { it in 1..65535 } ?: TataConstants.DEFAULT_PORT
-            server = TataHttpServer(root, port)
-            server?.start()
-            LogCollector.log("Tata server restarted on port $port")
-            startUpdateLoop()
+            synchronized(serverLock) {
+                stopServer()
+                delay(1000)
+                val result = TataBundleManager.ensureBundleReady(this@TataServerService, forceUpdate, LogCollector::log)
+                val root = result.rootDir
+                val prefs = SkySharedPref.getInstance(this@TataServerService)
+                val port = prefs.myPrefs.tataServerPort.takeIf { it in 1..65535 } ?: TataConstants.DEFAULT_PORT
+                server = TataHttpServer(root, port)
+                server?.start()
+                LogCollector.log("Tata server restarted on port $port")
+                startUpdateLoop()
+            }
         }
     }
 

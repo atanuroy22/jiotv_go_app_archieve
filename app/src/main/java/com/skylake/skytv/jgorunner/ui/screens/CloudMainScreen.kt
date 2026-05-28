@@ -259,7 +259,7 @@ fun CloudMainScreen(
                                     runBinary(activity, emptyArray(), {}, {})
                                 }
                             }
-                            delay(10000)
+                            delay(15000)
                         } else {
                             errorMessage = "No channels found."
                             break
@@ -268,7 +268,7 @@ fun CloudMainScreen(
                 } catch (e: Exception) {
                     if (isLocal) {
                         errorMessage = "Retrying local server... (${retryCount + 1})"
-                        delay(10000)
+                        delay(15000)
                     } else {
                         errorMessage = "Failed: ${e.localizedMessage}"
                         break

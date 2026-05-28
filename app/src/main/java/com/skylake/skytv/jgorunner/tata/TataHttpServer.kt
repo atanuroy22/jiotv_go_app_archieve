@@ -311,10 +311,25 @@ internal class TataHttpServer(
             return newFixedLengthResponse(Status.UNAUTHORIZED, MIME_PLAINTEXT, "Login required.")
         }
 
-        val response = client.newCall(Request.Builder().url(TataConstants.ORIGIN_API).build())
-            .execute()
-            .use { it.body?.string() }
-        val channels = extractChannelArray(response)
+        var response = try {
+            client.newCall(Request.Builder().url(TataConstants.ORIGIN_API).build())
+                .execute()
+                .use { if (it.isSuccessful) it.body?.string() else null }
+        } catch (_: Exception) {
+            null
+        }
+
+        var channels = extractChannelArray(response)
+        if (channels.length() == 0) {
+            response = try {
+                client.newCall(Request.Builder().url(TataConstants.FALLBACK_ORIGIN_API).build())
+                    .execute()
+                    .use { if (it.isSuccessful) it.body?.string() else null }
+            } catch (_: Exception) {
+                null
+            }
+            channels = extractChannelArray(response)
+        }
 
         val skipIds = fetchSkipIds()
         val userAgent = session.headers["user-agent"].orEmpty()
@@ -331,13 +346,17 @@ internal class TataHttpServer(
         val builder = StringBuilder()
         for (i in 0 until channels.length()) {
             val channel = channels.optJSONObject(i) ?: continue
-            val channelId = channel.optInt("id", -1)
+            var channelId = channel.optInt("id", -1)
+            if (channelId <= 0) {
+                channelId = channel.optString("channel_id", "-1").toIntOrNull() ?: -1
+            }
+
             if (channelId <= 0) continue
             if (skipIds.contains(channelId)) continue
             if (channel.optString("provider", "") == "DistroTV") continue
 
-            val channelName = channel.optString("title", "")
-            val channelLogo = channel.optString("transparentImageUrl", "")
+            val channelName = channel.optString("title", channel.optString("channel_name", ""))
+            val channelLogo = channel.optString("transparentImageUrl", channel.optString("logo", ""))
             val genres = channel.optJSONArray("genres")
             val genreList = mutableListOf<String>()
             if (genres != null) {
@@ -346,7 +365,7 @@ internal class TataHttpServer(
                     if (genre != "HD") genreList.add(genre)
                 }
             }
-            val channelGenre = genreList.firstOrNull() ?: "General"
+            val channelGenre = genreList.firstOrNull() ?: channel.optString("channel_genre", "General")
 
             val licenseUrl = "https://tp.drmlive-01.workers.dev?id=$channelId"
             val dashUrl = channel.optJSONObject("streamData")?.optString("dashWidewinePlayUrl", "").orEmpty()
