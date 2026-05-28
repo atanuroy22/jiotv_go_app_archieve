@@ -32,7 +32,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.skylake.skytv.jgorunner.activities.WebPlayerActivity
 import com.skylake.skytv.jgorunner.data.SkySharedPref
+import com.skylake.skytv.jgorunner.services.TataServerService
 import com.skylake.skytv.jgorunner.ui.components.LoginPopup
+import com.skylake.skytv.jgorunner.utils.LogCollector
 
 private const val DEFAULT_TATA_PORTAL_URL = "http://localhost:8000/tataplay/"
 private const val DEFAULT_TATA_PLAYLIST_URL = "http://localhost:8000/tataplay/playlist.php"
@@ -45,6 +47,7 @@ fun TataHomeScreen(
     val preferenceManager = SkySharedPref.getInstance(context)
     val scrollState = rememberScrollState()
     var showTataLoginPopup by remember { mutableStateOf(!preferenceManager.myPrefs.tataPlaySetupComplete) }
+    var tataServerRunning by remember { mutableStateOf(TataServerService.isRunning) }
 
     var portalUrl by rememberSaveable {
         mutableStateOf(
@@ -63,21 +66,33 @@ fun TataHomeScreen(
     }
 
     fun persist() {
-        val resolvedPortalUrl = normalizeUrl(portalUrl, DEFAULT_TATA_PORTAL_URL)
-        val resolvedPlaylistUrl = normalizeUrl(playlistUrl, DEFAULT_TATA_PLAYLIST_URL)
+        val port = preferenceManager.myPrefs.tataServerPort
+        val defaultPortal = "http://localhost:$port/tataplay/"
+        val defaultPlaylist = "http://localhost:$port/tataplay/playlist.php"
+        val resolvedPortalUrl = normalizeUrl(portalUrl, defaultPortal)
+        val resolvedPlaylistUrl = normalizeUrl(playlistUrl, defaultPlaylist)
         preferenceManager.myPrefs.tataPlayPortalUrl = resolvedPortalUrl
         preferenceManager.myPrefs.tataPlayPlaylistUrl = resolvedPlaylistUrl
         preferenceManager.myPrefs.tataPlaySetupComplete = true
         preferenceManager.myPrefs.cloudAutoplayServerUrl = resolvedPlaylistUrl
         preferenceManager.myPrefs.cloudAutoplayFirstChannel = true
+        preferenceManager.myPrefs.tataServerEnabled = true
         preferenceManager.savePreferences()
         portalUrl = resolvedPortalUrl
         playlistUrl = resolvedPlaylistUrl
+        LogCollector.log("Tata Play setup saved. Portal=$resolvedPortalUrl Playlist=$resolvedPlaylistUrl")
+        if (portalUrl.isBlank()) portalUrl = defaultPortal
+        if (playlistUrl.isBlank()) playlistUrl = defaultPlaylist
     }
 
     LaunchedEffect(Unit) {
         if (!preferenceManager.myPrefs.tataPlaySetupComplete) {
             showTataLoginPopup = true
+        }
+        if (preferenceManager.myPrefs.tataServerEnabled && !TataServerService.isRunning) {
+            TataServerService.start(context)
+            tataServerRunning = true
+            LogCollector.log("Tata server auto-start requested")
         }
     }
 
@@ -102,6 +117,12 @@ fun TataHomeScreen(
             fontSize = 14.sp
         )
 
+        Text(
+            text = if (tataServerRunning) "Server status: Running" else "Server status: Stopped",
+            color = if (tataServerRunning) Color(0xFF7CFFB3) else Color(0xFFFF8B8B),
+            fontSize = 14.sp
+        )
+
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -123,6 +144,7 @@ fun TataHomeScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(onClick = {
                         persist()
+                        LogCollector.log("Tata Play portal opened: ${preferenceManager.myPrefs.tataPlayPortalUrl}")
                         context.startActivity(
                             Intent(context, WebPlayerActivity::class.java).apply {
                                 putExtra("startup_url", preferenceManager.myPrefs.tataPlayPortalUrl)
@@ -134,9 +156,42 @@ fun TataHomeScreen(
 
                     Button(onClick = {
                         persist()
+                        LogCollector.log("Tata Play Cloud opened using playlist: ${preferenceManager.myPrefs.tataPlayPlaylistUrl}")
                         onNavigate("CloudHome")
                     }) {
                         Text("Open Cloud")
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = {
+                        preferenceManager.myPrefs.tataServerEnabled = true
+                        preferenceManager.savePreferences()
+                        TataServerService.start(context)
+                        tataServerRunning = true
+                        LogCollector.log("Tata server start requested")
+                    }) {
+                        Text("Start Server")
+                    }
+                    Button(onClick = {
+                        preferenceManager.myPrefs.tataServerEnabled = false
+                        preferenceManager.savePreferences()
+                        TataServerService.stop(context)
+                        tataServerRunning = false
+                        LogCollector.log("Tata server stop requested")
+                    }) {
+                        Text("Stop Server")
+                    }
+                    Button(onClick = {
+                        context.startService(
+                            Intent(context, TataServerService::class.java).apply {
+                                action = TataServerService.ACTION_RESTART
+                            }
+                        )
+                        tataServerRunning = true
+                        LogCollector.log("Tata server update requested")
+                    }) {
+                        Text("Update Server")
                     }
                 }
 

@@ -41,6 +41,7 @@ import com.skylake.skytv.jgorunner.core.update.SemanticVersionNew
 import com.skylake.skytv.jgorunner.core.update.Status
 import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.services.BinaryService
+import com.skylake.skytv.jgorunner.services.TataServerService
 import com.skylake.skytv.jgorunner.services.player.LandingPage
 import com.skylake.skytv.jgorunner.ui.components.BottomNavigationBar
 import com.skylake.skytv.jgorunner.ui.components.CustPopup
@@ -150,6 +151,10 @@ class MainActivity : ComponentActivity() {
                 onOutput = { output -> outputText = output },
                 forceStart = false
             )
+        }
+
+        if (preferenceManager.myPrefs.tataServerEnabled && !TataServerService.isRunning) {
+            TataServerService.start(this)
         }
     }
 

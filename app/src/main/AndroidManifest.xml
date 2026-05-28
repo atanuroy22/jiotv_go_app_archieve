@@ -162,6 +162,11 @@
             android:foregroundServiceType="mediaPlayback"
             android:exported="false" />
 
+        <service
+            android:name=".services.TataServerService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
+
         <receiver
             android:name=".receivers.BootReceiver"
             android:enabled="true"

@@ -8,6 +8,7 @@ import android.util.Log
 import android.widget.Toast
 import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.services.BinaryService
+import com.skylake.skytv.jgorunner.services.TataServerService
 
 class BootReceiver : BroadcastReceiver() {
     companion object {
@@ -24,6 +25,7 @@ class BootReceiver : BroadcastReceiver() {
         val preferenceManager = SkySharedPref.getInstance(context)
         val isAutoStartOnBootEnabled = preferenceManager.myPrefs.autoStartOnBoot
         val autoStartOnBootForeground = preferenceManager.myPrefs.autoStartOnBootForeground
+        val shouldStartTata = preferenceManager.myPrefs.tataServerEnabled
 
         if (isAutoStartOnBootEnabled) {
             if (autoStartOnBootForeground) {
@@ -33,6 +35,10 @@ class BootReceiver : BroadcastReceiver() {
             } else {
                 startBinaryService(context)
             }
+        }
+
+        if (shouldStartTata) {
+            TataServerService.start(context)
         }
     }
 

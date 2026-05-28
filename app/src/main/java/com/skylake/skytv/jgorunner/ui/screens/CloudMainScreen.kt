@@ -60,6 +60,7 @@ import com.skylake.skytv.jgorunner.utils.LogCollector
 import com.skylake.skytv.jgorunner.data.CloudDataManager
 import com.skylake.skytv.jgorunner.core.execution.runBinary
 import com.skylake.skytv.jgorunner.activities.WebPlayerActivity
+import com.skylake.skytv.jgorunner.services.TataServerService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -235,6 +236,8 @@ fun CloudMainScreen(
 
             var retryCount = 0
             val isLocal = server.url.contains("localhost") || server.url.contains("127.0.0.1")
+            val isTataPlay = server.name.contains("tata play", ignoreCase = true) ||
+                server.url.contains("tataplay", ignoreCase = true)
 
             while (retryCount < 5) {
                 try {
@@ -246,9 +249,15 @@ fun CloudMainScreen(
                     } else {
                         if (isLocal) {
                             errorMessage = "Starting local server... (${retryCount + 1})"
+                            if (isTataPlay) {
+                                LogCollector.log("Tata Play local portal not ready. Waiting for ${server.url}")
+                                TataServerService.start(context)
+                            }
                             val activity = context.findActivity() as? ComponentActivity
                             if (activity != null) {
-                                runBinary(activity, emptyArray(), {}, {})
+                                if (!isTataPlay) {
+                                    runBinary(activity, emptyArray(), {}, {})
+                                }
                             }
                             delay(10000)
                         } else {
