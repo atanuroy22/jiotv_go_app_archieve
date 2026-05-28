@@ -25,7 +25,7 @@ internal class TataHttpServer(
         .readTimeout(40, TimeUnit.SECONDS)
         .build()
 
-    private val dataDir = File(baseDir, "app/data")
+    private val dataDir = File(baseDir.parentFile ?: baseDir, TataConstants.STATE_DIR_NAME)
 
     override fun serve(session: IHTTPSession): Response {
         val uri = session.uri ?: "/"
@@ -375,7 +375,7 @@ internal class TataHttpServer(
         }
 
         val responseBody = builder.toString()
-        return newFixedLengthResponse(Status.OK, "audio/x-mpegurl", responseBody)
+        return newFixedLengthResponse(Status.OK, "audio/x-mpegurl", "#EXTM3U\n$responseBody")
             .also { it.addHeader("Content-Disposition", "attachment; filename=\"playlist.m3u\"") }
     }
 

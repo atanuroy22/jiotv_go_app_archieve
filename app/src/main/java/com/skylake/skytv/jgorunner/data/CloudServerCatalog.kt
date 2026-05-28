@@ -65,7 +65,7 @@ suspend fun fetchCloudServerCatalog(context: Context, repository: CloudRepositor
     val tataPlayServer = CloudServer(
         name = "Tata Play",
         url = tataPlayPlaylistUrl,
-        logo = ""
+        logo = com.skylake.skytv.jgorunner.tata.TataConstants.TATA_PLAY_LOGO_URL
     )
 
     addServers("Tata Play", listOf(tataPlayServer), false)

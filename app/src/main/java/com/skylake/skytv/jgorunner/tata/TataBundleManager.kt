@@ -30,6 +30,7 @@ internal object TataBundleManager {
         val prefs = pref.myPrefs
         val now = System.currentTimeMillis()
         val rootDir = File(context.filesDir, TataConstants.ROOT_DIR_NAME)
+        migrateLegacyState(context, rootDir, log)
         val shouldCheck = forceUpdate ||
             now - prefs.tataLastUpdateCheck >= TataConstants.UPDATE_CHECK_INTERVAL_MS ||
             !rootDir.exists()
@@ -73,6 +74,28 @@ internal object TataBundleManager {
         prefs.tataLastUpdateCheck = now
         pref.savePreferences()
         return BundleResult(rootDir, updateNeeded)
+    }
+
+    private fun migrateLegacyState(context: Context, rootDir: File, log: (String) -> Unit) {
+        val legacyDir = File(rootDir, "app/data")
+        val stateDir = File(context.filesDir, TataConstants.STATE_DIR_NAME)
+        if (!legacyDir.exists() || !legacyDir.isDirectory) return
+        if (stateDir.exists() && stateDir.listFiles()?.isNotEmpty() == true) return
+
+        try {
+            stateDir.mkdirs()
+            legacyDir.listFiles()?.forEach { file ->
+                val target = File(stateDir, file.name)
+                if (file.isDirectory) {
+                    file.copyRecursively(target, overwrite = true)
+                } else {
+                    file.copyTo(target, overwrite = true)
+                }
+            }
+            log("Migrated Tata login state to persistent storage")
+        } catch (e: Exception) {
+            log("Tata state migration skipped: ${e.message}")
+        }
     }
 
     private fun downloadAndExtract(context: Context, rootDir: File, log: (String) -> Unit) {

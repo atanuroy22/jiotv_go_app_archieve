@@ -33,6 +33,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import com.skylake.skytv.jgorunner.activities.WebPlayerActivity
 import com.skylake.skytv.jgorunner.data.SkySharedPref
 import com.skylake.skytv.jgorunner.services.TataServerService
+import com.skylake.skytv.jgorunner.tata.TataConstants
 import com.skylake.skytv.jgorunner.ui.components.LoginPopup
 import com.skylake.skytv.jgorunner.utils.LogCollector
 
@@ -163,14 +164,17 @@ fun TataHomeScreen(
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Button(onClick = {
                         preferenceManager.myPrefs.tataServerEnabled = true
                         preferenceManager.savePreferences()
                         TataServerService.start(context)
                         tataServerRunning = true
                         LogCollector.log("Tata server start requested")
-                    }) {
+                    }, modifier = Modifier.weight(1f)) {
                         Text("Start Server")
                     }
                     Button(onClick = {
@@ -179,7 +183,7 @@ fun TataHomeScreen(
                         TataServerService.stop(context)
                         tataServerRunning = false
                         LogCollector.log("Tata server stop requested")
-                    }) {
+                    }, modifier = Modifier.weight(1f)) {
                         Text("Stop Server")
                     }
                     Button(onClick = {
@@ -190,7 +194,7 @@ fun TataHomeScreen(
                         )
                         tataServerRunning = true
                         LogCollector.log("Tata server update requested")
-                    }) {
+                    }, modifier = Modifier.weight(1f)) {
                         Text("Update Server")
                     }
                 }
