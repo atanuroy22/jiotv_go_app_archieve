@@ -314,8 +314,7 @@ internal class TataHttpServer(
         val response = client.newCall(Request.Builder().url(TataConstants.ORIGIN_API).build())
             .execute()
             .use { it.body?.string() }
-        val data = try { JSONObject(response ?: "{}") } catch (_: Exception) { JSONObject() }
-        val channels = data.optJSONObject("data")?.optJSONArray("list") ?: JSONArray()
+        val channels = extractChannelArray(response)
 
         val skipIds = fetchSkipIds()
         val userAgent = session.headers["user-agent"].orEmpty()
@@ -351,23 +350,23 @@ internal class TataHttpServer(
 
             val licenseUrl = "https://tp.drmlive-01.workers.dev?id=$channelId"
             val dashUrl = channel.optJSONObject("streamData")?.optString("dashWidewinePlayUrl", "").orEmpty()
+            val proxyUrl = "$baseUrl/$streamPath?id=$channelId$liveHeaders"
 
-            var channelLive = ""
-            var useProxy = false
-            if (dashUrl.isNotBlank()) {
+            val channelLive = if (dashUrl.isNotBlank()) {
                 val dashHost = try { URI(dashUrl).host } catch (_: Exception) { null }
                 if (!dashHost.isNullOrBlank() && dashHost.startsWith("bpaita")) {
-                    channelLive = "$baseUrl/$streamPath?id=$channelId$liveHeaders"
-                    useProxy = true
+                    proxyUrl
                 } else {
-                    channelLive = dashUrl
+                    dashUrl
                 }
+            } else {
+                proxyUrl
             }
 
             builder.append("#EXTINF:-1 tvg-id=\"ts$channelId\" tvg-logo=\"$channelLogo\" group-title=\"$channelGenre\",$channelName\n")
             builder.append("#KODIPROP:inputstream.adaptive.license_type=clearkey\n")
             builder.append("#KODIPROP:inputstream.adaptive.license_key=$licenseUrl\n")
-            if (useProxy) {
+            if (channelLive == proxyUrl) {
                 builder.append("#KODIPROP:inputstream.adaptive.manifest_type=mpd\n")
             }
             builder.append("#EXTVLCOPT:http-user-agent=${TataConstants.UA}\n")
@@ -377,6 +376,40 @@ internal class TataHttpServer(
         val responseBody = builder.toString()
         return newFixedLengthResponse(Status.OK, "audio/x-mpegurl", "#EXTM3U\n$responseBody")
             .also { it.addHeader("Content-Disposition", "attachment; filename=\"playlist.m3u\"") }
+    }
+
+    private fun extractChannelArray(body: String?): JSONArray {
+        val root = try {
+            val text = body?.trim().orEmpty()
+            if (text.startsWith("[")) {
+                JSONArray(text)
+            } else {
+                JSONObject(text.ifBlank { "{}" })
+            }
+        } catch (_: Exception) {
+            return JSONArray()
+        }
+
+        if (root is JSONArray) return root
+        return findFirstJsonArray(root) ?: JSONArray()
+    }
+
+    private fun findFirstJsonArray(value: Any?): JSONArray? {
+        return when (value) {
+            is JSONArray -> value
+            is JSONObject -> {
+                listOf("channels", "data", "list", "items", "result", "results").forEach { key ->
+                    findFirstJsonArray(value.opt(key))?.let { return it }
+                }
+
+                value.keys().forEach { key ->
+                    findFirstJsonArray(value.opt(key))?.let { return it }
+                }
+
+                null
+            }
+            else -> null
+        }
     }
 
     private fun handleGetMpd(session: IHTTPSession): Response {
