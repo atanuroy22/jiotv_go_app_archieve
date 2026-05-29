@@ -426,8 +426,11 @@ fun CloudPlayerScreen(
             }
         }
         val isLocalPlayback = playbackUrl.contains("localhost", true) || playbackUrl.contains("127.0.0.1")
-        val preferredPlaybackUrl =
-            if (isLocalPlayback && !ch.m3u8Url.isNullOrBlank()) ch.m3u8Url ?: playbackUrl else playbackUrl
+        val preferredPlaybackUrl = when {
+            isLocalPlayback -> playbackUrl
+            isFallbackAttempt -> ch.m3u8Url ?: ch.mpdUrl ?: playbackUrl
+            else -> playbackUrl
+        }
 
         if (playbackUrl.isNotBlank()) {
             val normalized = normalizePlaybackUrl(
@@ -449,6 +452,7 @@ fun CloudPlayerScreen(
                 !normalized.contains("/live/") &&
                 (
                     normalized.contains(".mpd") ||
+                        normalized.contains("get-mpd.php", ignoreCase = true) ||
                         normalized.contains("/play/") ||
                         normalized.contains("play.php") ||
                         normalized.contains("jio.com") ||
