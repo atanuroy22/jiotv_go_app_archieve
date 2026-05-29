@@ -279,15 +279,15 @@ fun CloudPlayerScreen(
             normalizedHeaders[key] = v
         }
 
-        extractHeaderHintsFromUrl(playbackUrl).forEach { (key, value) ->
-            normalizedHeaders[key] = value
-        }
-
         playerError = null
         retryCountRef.value = 0
 
         var resolvedLicenseUrl = ch.licenseUrl
         var playbackUrl = if (isFallbackAttempt) ch.m3u8Url ?: ch.mpdUrl ?: "" else ch.mpdUrl ?: ch.m3u8Url ?: ""
+
+        extractHeaderHintsFromUrl(playbackUrl).forEach { (key, value) ->
+            normalizedHeaders[key] = value
+        }
 
         val isCrystalServer = serverUrl?.contains("jstr4web.json", ignoreCase = true) == true
          if (isCrystalServer) {
