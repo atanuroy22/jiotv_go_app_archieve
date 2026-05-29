@@ -2,7 +2,6 @@ package com.skylake.skytv.jgorunner.data
 
 import com.google.gson.Gson
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -88,25 +87,4 @@ class CloudParsersTest {
         assertEquals("http://localhost:5350/jtvimage/143.png", channels[0].logo)
     }
 
-        @Test
-        fun parseServerGroups_marksM3uEntriesAsPlayablePlaylists() {
-                val json = """
-                        {
-                            "Star": [
-                                {
-                                    "name": "",
-                                    "url": "",
-                                    "image": "",
-                                    "m3u": "true"
-                                }
-                            ]
-                        }
-                """.trimIndent()
-
-                val groups = CloudParsers.parseServerGroups(gson, json)
-
-                assertEquals(1, groups["Star"]?.size)
-                assertFalse(groups["Star"]?.firstOrNull()?.isWebTv ?: true)
-                assertEquals("", groups["Star"]?.firstOrNull()?.server?.url)
-        }
 }

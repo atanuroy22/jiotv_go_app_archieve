@@ -12,6 +12,7 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.net.URI
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
@@ -371,11 +372,16 @@ internal class TataHttpServer(
             val licenseUrl = "https://tp.drmlive-01.workers.dev?id=$channelId"
             val dashUrl = channel.optJSONObject("streamData")?.optString("dashWidewinePlayUrl", "").orEmpty()
             val proxyUrl = "$baseUrl/$streamPath?id=$channelId$liveHeaders"
+            val proxyWithSourceUrl = if (dashUrl.isNotBlank()) {
+                "$proxyUrl&src=${URLEncoder.encode(dashUrl, Charsets.UTF_8.name())}"
+            } else {
+                proxyUrl
+            }
 
             val channelLive = if (dashUrl.isNotBlank()) {
                 val dashHost = try { URI(dashUrl).host } catch (_: Exception) { null }
                 if (!dashHost.isNullOrBlank() && dashHost.startsWith("bpaita")) {
-                    proxyUrl
+                    proxyWithSourceUrl
                 } else {
                     dashUrl
                 }
@@ -459,6 +465,7 @@ internal class TataHttpServer(
         val cred = readJsonFile(credFile)
         val deviceId = cred?.optString("deviceId", "").orEmpty()
         val anonymousId = cred?.optString("anonymousId", "").orEmpty()
+        val sourceUrl = session.parms["src"].orEmpty().trim()
 
         val cachedEntry = cacheData.optJSONObject(id)
         if (cachedEntry != null) {
@@ -466,6 +473,28 @@ internal class TataHttpServer(
             val exp = extractExpFromUrl(cachedUrl)
             if (exp != null && System.currentTimeMillis() / 1000 < exp) {
                 mpdUrl = cachedUrl
+            }
+        }
+
+        if (mpdUrl.isBlank() && sourceUrl.isNotBlank()) {
+            val directUrl = sourceUrl
+                .replace("bpaita", "bpaicatchupta")
+                .replace("manifest", "Manifest")
+
+            if (!directUrl.contains("bpaicatchupta")) {
+                val redirect = newFixedLengthResponse(Status.REDIRECT, MIME_PLAINTEXT, "")
+                redirect.addHeader("Location", directUrl)
+                return redirect
+            }
+
+            val headerResp = fetchHeaders(directUrl)
+            val hdntl = extractHdntl(headerResp)
+            val cleanUrl = directUrl.substringBefore("?")
+            mpdUrl = if (!hdntl.isNullOrBlank()) {
+                if (hdntl.startsWith("hdntl=")) "$cleanUrl?$hdntl" else "$cleanUrl?hdntl=$hdntl"
+            } else {
+                val location = headerResp["Location"]
+                if (!location.isNullOrBlank()) location.substringBefore("&") else directUrl
             }
         }
 
