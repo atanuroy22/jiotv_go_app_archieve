@@ -490,11 +490,15 @@ internal class TataHttpServer(
             val headerResp = fetchHeaders(directUrl)
             val hdntl = extractHdntl(headerResp)
             val cleanUrl = directUrl.substringBefore("?")
-            mpdUrl = if (!hdntl.isNullOrBlank()) {
+            val candidateUrl = if (!hdntl.isNullOrBlank()) {
                 if (hdntl.startsWith("hdntl=")) "$cleanUrl?$hdntl" else "$cleanUrl?hdntl=$hdntl"
             } else {
                 val location = headerResp["Location"]
                 if (!location.isNullOrBlank()) location.substringBefore("&") else directUrl
+            }
+
+            if (candidateUrl.isNotBlank() && fetchMpd(candidateUrl) != null) {
+                mpdUrl = candidateUrl
             }
         }
 
@@ -653,7 +657,13 @@ internal class TataHttpServer(
                 .addHeader("Connection", "close")
                 .build()
             client.newCall(request).execute().use { response ->
-                response.headers.names().associateWith { name -> response.header(name).orEmpty() }
+                if (!response.isSuccessful && response.code != 302) return emptyMap()
+                val map = response.headers.names().associateWith { name -> response.header(name).orEmpty() }.toMutableMap()
+                val cookies = response.headers("Set-Cookie")
+                if (cookies.isNotEmpty()) {
+                    map["Set-Cookie"] = cookies.joinToString("; ")
+                }
+                map
             }
         } catch (_: Exception) {
             emptyMap()
@@ -662,9 +672,13 @@ internal class TataHttpServer(
 
     private fun extractHdntl(headers: Map<String, String>): String? {
         val setCookie = headers["Set-Cookie"].orEmpty()
-        if (setCookie.contains("hdntl=")) {
-            val match = Regex("hdntl=([^;]+)").find(setCookie)
-            if (match != null) return match.groupValues[1]
+        if (setCookie.isNotBlank()) {
+            val cookies = setCookie.split(";").map { it.trim() }
+            for (cookie in cookies) {
+                if (cookie.startsWith("hdntl=")) {
+                    return cookie.substringAfter("hdntl=")
+                }
+            }
         }
         val hdntl = headers["hdntl"]
         return hdntl?.trim()
@@ -679,7 +693,10 @@ internal class TataHttpServer(
                 .addHeader("Referer", "https://watch.tataplay.com/")
                 .addHeader("Origin", "https://watch.tataplay.com")
                 .build()
-            client.newCall(request).execute().use { it.body?.string() }
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                response.body?.string()
+            }
         } catch (_: Exception) {
             null
         }

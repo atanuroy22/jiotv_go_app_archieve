@@ -139,7 +139,7 @@ fun CloudPlayerScreen(
                 val url = request.url.toString()
                 val builder = request.newBuilder()
 
-                val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
+                val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/131.0.6778.260 Mobile Safari/537.36"
 
                 if (url.contains("jio.com", true) || url.contains("webplay.fun", true)) {
                     if (request.header("User-Agent").isNullOrBlank()) {
@@ -310,11 +310,11 @@ fun CloudPlayerScreen(
             channelUserAgent.contains("JioTV", ignoreCase = true) ||
             channelUserAgent.contains("AppleWebKit", ignoreCase = true) ||
             channelUserAgent.contains("Chrome", ignoreCase = true)
-        if (!normalizedHeaders.containsKey("User-Agent")) {
+        if (normalizedHeaders.keys.none { it.equals("User-Agent", true) }) {
             normalizedHeaders["User-Agent"] = when {
                 looksLikeRealUserAgent -> channelUserAgent
                 playbackUrl.contains("jio.com", true) || playbackUrl.contains("jio.dev", true) ->
-                    "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
+                    "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/131.0.6778.260 Mobile Safari/537.36"
                 else -> channelUserAgent
             }
         }
@@ -340,23 +340,23 @@ fun CloudPlayerScreen(
             (ch.mpdUrl?.contains("alex4528.site", true) == true) ||
             (ch.m3u8Url?.contains("alex4528.site", true) == true)
         if (alexJplusHost) {
-            if (!normalizedHeaders.containsKey("Origin")) {
+            if (normalizedHeaders.keys.none { it.equals("Origin", true) }) {
                 normalizedHeaders["Origin"] = "https://alex4528.site"
             }
-            if (!normalizedHeaders.containsKey("Referer")) {
+            if (normalizedHeaders.keys.none { it.equals("Referer", true) }) {
                 normalizedHeaders["Referer"] = "https://alex4528.site/"
             }
         }
 
         // >>> JIO HEADERS FIX <<<
         if (playbackUrl.contains("jio.com", true) || playbackUrl.contains("jio.dev", true)) {
-            val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
-            if (!normalizedHeaders.keys.any { it.equals("User-Agent", true) }) normalizedHeaders["User-Agent"] = jioUA
-            if (!normalizedHeaders.keys.any { it.equals("Origin", true) }) normalizedHeaders["Origin"] = "https://www.jio.com"
-            if (!normalizedHeaders.keys.any { it.equals("Referer", true) }) normalizedHeaders["Referer"] = "https://www.jio.com/"
-            if (!normalizedHeaders.keys.any { it.equals("X-Requested-With", true) }) normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
-            if (!normalizedHeaders.keys.any { it.equals("Accept", true) }) normalizedHeaders["Accept"] = "application/json, text/plain, */*"
-            if (!normalizedHeaders.keys.any { it.equals("Accept-Language", true) }) normalizedHeaders["Accept-Language"] = "en-US,en;q=0.9"
+            val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/131.0.6778.260 Mobile Safari/537.36"
+            if (normalizedHeaders.keys.none { it.equals("User-Agent", true) }) normalizedHeaders["User-Agent"] = jioUA
+            if (normalizedHeaders.keys.none { it.equals("Origin", true) }) normalizedHeaders["Origin"] = "https://www.jio.com"
+            if (normalizedHeaders.keys.none { it.equals("Referer", true) }) normalizedHeaders["Referer"] = "https://www.jio.com/"
+            if (normalizedHeaders.keys.none { it.equals("X-Requested-With", true) }) normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
+            if (normalizedHeaders.keys.none { it.equals("Accept", true) }) normalizedHeaders["Accept"] = "*/*"
+            if (normalizedHeaders.keys.none { it.equals("Accept-Language", true) }) normalizedHeaders["Accept-Language"] = "en-US,en;q=0.9"
         }
 
         // >>> EXTRACTOR FOR TATA BING <<<
