@@ -1,5 +1,6 @@
 package com.skylake.skytv.jgorunner.tata
 
+import android.util.Log
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoHTTPD.Response.Status
 import okhttp3.MediaType.Companion.toMediaType
@@ -432,7 +433,8 @@ internal class TataHttpServer(
     }
 
     private fun handleGetMpd(session: IHTTPSession): Response {
-        val id = session.parms["id"].orEmpty()
+        val rawId = session.parms["id"].orEmpty()
+        val id = rawId.substringBefore("|").substringBefore("&")
         if (id.isBlank()) {
             return newFixedLengthResponse(Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing content ID.")
         }
@@ -474,6 +476,7 @@ internal class TataHttpServer(
             val contentData = try { JSONObject(responseText ?: "{}") } catch (_: Exception) { JSONObject() }
             val encryptedDash = contentData.optJSONObject("data")?.optString("dashPlayreadyPlayUrl", "")
             if (encryptedDash.isNullOrBlank()) {
+                Log.e("TataHttpServer", "dashPlayreadyPlayUrl not found for ID: $id. Response: $responseText")
                 return newFixedLengthResponse(Status.NOT_FOUND, MIME_PLAINTEXT, "dashPlayreadyPlayUrl not found.")
             }
 
