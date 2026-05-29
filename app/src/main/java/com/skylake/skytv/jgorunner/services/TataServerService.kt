@@ -25,6 +25,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class TataServerService : Service() {
     companion object {
@@ -57,7 +59,7 @@ class TataServerService : Service() {
 
     private var server: TataHttpServer? = null
     private var updateJob: Job? = null
-    private val serverLock = Any()
+    private val serverMutex = Mutex()
 
     override fun onCreate() {
         super.onCreate()
@@ -90,7 +92,7 @@ class TataServerService : Service() {
         }
 
         CoroutineScope(Dispatchers.IO).launch {
-            synchronized(serverLock) {
+            serverMutex.withLock {
                 if (server != null) return@launch
                 try {
                     val result = TataBundleManager.ensureBundleReady(this@TataServerService, log = LogCollector::log)
@@ -116,7 +118,7 @@ class TataServerService : Service() {
 
     private fun restartServer(forceUpdate: Boolean) {
         CoroutineScope(Dispatchers.IO).launch {
-            synchronized(serverLock) {
+            serverMutex.withLock {
                 stopServer()
                 delay(1000)
                 val result = TataBundleManager.ensureBundleReady(this@TataServerService, forceUpdate, LogCollector::log)
