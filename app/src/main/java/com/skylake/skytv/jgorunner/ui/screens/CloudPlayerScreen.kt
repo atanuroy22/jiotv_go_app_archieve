@@ -279,7 +279,7 @@ fun CloudPlayerScreen(
             normalizedHeaders[key] = v
         }
 
-        extractHeaderHintsFromUrl(preferredPlaybackUrl).forEach { (key, value) ->
+        extractHeaderHintsFromUrl(playbackUrl).forEach { (key, value) ->
             normalizedHeaders[key] = value
         }
 
