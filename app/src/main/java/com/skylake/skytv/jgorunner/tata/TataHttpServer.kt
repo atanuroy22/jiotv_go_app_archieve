@@ -470,34 +470,58 @@ internal class TataHttpServer(
         }
 
         if (mpdUrl.isBlank()) {
-            val apiId = if (id.startsWith("ts")) id else "ts$id"
-            val contentUrl = TataConstants.CONTENT_API_PREFIX + apiId
-            val contentRequest = Request.Builder()
-                .url(contentUrl)
-                .get()
-                .addHeader("Authorization", "Bearer $userToken")
-                .addHeader("subscriberId", subscriberId)
-                .addHeader("deviceid", deviceId)
-                .addHeader("anonymousid", anonymousId)
-                .addHeader("platform", "BINGE_ANYWHERE")
-                .addHeader("Origin", "https://www.tataplaybinge.com")
-                .addHeader("Referer", "https://www.tataplaybinge.com/")
-                .addHeader("User-Agent", TataConstants.UA)
-                .build()
-            Log.d("TataHttpServer", "Fetching manifest from: $contentUrl")
-            val response = client.newCall(contentRequest).execute()
-            val responseText = response.use { it.body?.string() }
-            if (response.code != 200) {
-                Log.e("TataHttpServer", "Content API error ${response.code}: $responseText")
+            val apiIds = linkedSetOf<String>()
+            val strippedId = id.removePrefix("ts").trim()
+            if (id.startsWith("ts")) {
+                apiIds.add(id)
+                if (strippedId.isNotBlank()) {
+                    apiIds.add(strippedId)
+                }
+            } else {
+                apiIds.add("ts$id")
+                apiIds.add(id)
             }
-            val contentData = try { JSONObject(responseText ?: "{}") } catch (_: Exception) { JSONObject() }
-            val dataObj = contentData.optJSONObject("data")
-            val encryptedDash = dataObj?.optString("dashPlayreadyPlayUrl", "")
-                ?.ifBlank { dataObj.optString("dashWidewinePlayUrl", "") }
-                ?.ifBlank { dataObj.optString("dashPlayUrl", "") }
+
+            var responseText: String? = null
+            var encryptedDash: String? = null
+            var lastError: String? = null
+
+            for (apiId in apiIds) {
+                val contentUrl = TataConstants.CONTENT_API_PREFIX + apiId
+                val contentRequest = Request.Builder()
+                    .url(contentUrl)
+                    .get()
+                    .addHeader("Authorization", "Bearer $userToken")
+                    .addHeader("subscriberId", subscriberId)
+                    .addHeader("deviceid", deviceId)
+                    .addHeader("anonymousid", anonymousId)
+                    .addHeader("platform", "BINGE_ANYWHERE")
+                    .addHeader("Origin", "https://www.tataplaybinge.com")
+                    .addHeader("Referer", "https://www.tataplaybinge.com/")
+                    .addHeader("User-Agent", TataConstants.UA)
+                    .build()
+                Log.d("TataHttpServer", "Fetching manifest from: $contentUrl")
+
+                val response = client.newCall(contentRequest).execute()
+                responseText = response.use { it.body?.string() }
+                if (response.code != 200) {
+                    lastError = "Content API error ${response.code}: $responseText"
+                    Log.e("TataHttpServer", lastError.orEmpty())
+                    continue
+                }
+
+                val contentData = try { JSONObject(responseText ?: "{}") } catch (_: Exception) { JSONObject() }
+                encryptedDash = findFirstString(contentData, "dashPlayreadyPlayUrl", "dashWidewinePlayUrl", "dashPlayUrl")
+                if (!encryptedDash.isNullOrBlank()) {
+                    break
+                }
+            }
 
             if (encryptedDash.isNullOrBlank()) {
-                Log.e("TataHttpServer", "Manifest URL not found for ID: $id. Response: $responseText")
+                Log.e(
+                    "TataHttpServer",
+                    "Manifest URL not found for ID: $id. Last error: ${lastError.orEmpty()}. Response: ${responseText.orEmpty()}"
+                )
                 return newFixedLengthResponse(Status.NOT_FOUND, MIME_PLAINTEXT, "Manifest URL not found.")
             }
 
@@ -717,6 +741,29 @@ internal class TataHttpServer(
             JSONObject(file.readText())
         } catch (_: Exception) {
             null
+        }
+    }
+
+    private fun findFirstString(value: Any?, vararg keys: String): String? {
+        return when (value) {
+            is JSONObject -> {
+                for (key in keys) {
+                    val direct = value.optString(key, "").trim()
+                    if (direct.isNotBlank()) return direct
+                }
+
+                value.keys().forEach { key ->
+                    findFirstString(value.opt(key), *keys)?.let { return it }
+                }
+                null
+            }
+            is JSONArray -> {
+                for (index in 0 until value.length()) {
+                    findFirstString(value.opt(index), *keys)?.let { return it }
+                }
+                null
+            }
+            else -> null
         }
     }
 
