@@ -19,6 +19,11 @@ object CloudParsers {
     private val extVlcOptRegex = Regex("""#EXTVLCOPT:([^=]+)=(.*)""", RegexOption.IGNORE_CASE)
     private val urlRegex = Regex("""https?://[^\s"']+""", RegexOption.IGNORE_CASE)
 
+    data class ServerGroupEntry(
+        val server: CloudServer,
+        val isWebTv: Boolean
+    )
+
     fun parseServerList(gson: Gson, body: String): List<CloudServer> {
         val directType = object : TypeToken<List<CloudServer>>() {}.type
         try {
@@ -43,7 +48,7 @@ object CloudParsers {
         return mapped.distinctBy { it.url }
     }
 
-    fun parseServerGroups(gson: Gson, body: String): Map<String, List<CloudServer>> {
+    fun parseServerGroups(gson: Gson, body: String): Map<String, List<ServerGroupEntry>> {
         val root = try {
             JsonParser.parseString(body)
         } catch (_: Exception) {
@@ -52,7 +57,7 @@ object CloudParsers {
 
         if (!root.isJsonObject) return emptyMap()
         val obj = root.asJsonObject
-        val groups = linkedMapOf<String, List<CloudServer>>()
+        val groups = linkedMapOf<String, List<ServerGroupEntry>>()
 
         obj.entrySet().forEach { entry ->
             val key = entry.key?.trim().orEmpty()
@@ -61,8 +66,13 @@ object CloudParsers {
             if (!value.isJsonArray) return@forEach
             val servers = value.asJsonArray.mapNotNull { el ->
                 val serverObj = el.asJsonObjectOrNull() ?: return@mapNotNull null
-                parseServerObject(serverObj)
-            }.distinctBy { it.url }
+                parseServerObject(serverObj)?.let { server ->
+                    ServerGroupEntry(
+                        server = server,
+                        isWebTv = !parseM3uFlag(serverObj)
+                    )
+                }
+            }.distinctBy { it.server.url }
 
             if (servers.isNotEmpty()) {
                 groups[key] = servers
@@ -72,7 +82,11 @@ object CloudParsers {
         if (groups.isNotEmpty()) return groups
 
         val direct = parseServerList(gson, body)
-        return if (direct.isNotEmpty()) mapOf("Servers" to direct) else emptyMap()
+        return if (direct.isNotEmpty()) {
+            mapOf("Servers" to direct.map { ServerGroupEntry(it, isWebTv = false) })
+        } else {
+            emptyMap()
+        }
     }
 
     fun unwrapChannelContainer(value: Any?): List<*>? {
@@ -438,6 +452,14 @@ object CloudParsers {
         val finalUrl = url?.trim().orEmpty()
         if (finalName.isBlank() || finalUrl.isBlank()) return null
         return CloudServer(name = finalName, url = finalUrl, logo = logo.trim())
+    }
+
+    private fun parseM3uFlag(obj: JsonObject): Boolean {
+        val raw = obj.firstStringOf("m3u", "is_m3u", "isM3u", "m3u_playlist", "m3uPlaylist")
+            ?.trim()
+            ?.lowercase()
+            .orEmpty()
+        return raw == "true" || raw == "1" || raw == "yes" || raw == "on"
     }
 
     private fun JsonObject.firstStringOf(vararg keys: String): String? {

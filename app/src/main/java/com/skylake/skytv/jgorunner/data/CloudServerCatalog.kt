@@ -92,8 +92,10 @@ suspend fun fetchCloudServerCatalog(context: Context, repository: CloudRepositor
     addServers("Sports", listOf(fancodeServer), false)
 
     val dynamicGroups = repository.fetchServerGroups(SERVER_GROUPS_URL)
-    dynamicGroups.forEach { (category, servers) ->
-        addServers(category, servers, true)
+    dynamicGroups.forEach { (category, serverEntries) ->
+        serverEntries.forEach { entry ->
+            addServers(category, listOf(entry.server), entry.isWebTv)
+        }
     }
 
     val entries = catalogByCategory.values.flatMap { it.values }
