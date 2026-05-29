@@ -511,7 +511,13 @@ internal class TataHttpServer(
                 }
 
                 val contentData = try { JSONObject(responseText ?: "{}") } catch (_: Exception) { JSONObject() }
-                encryptedDash = findFirstString(contentData, "dashPlayreadyPlayUrl", "dashWidewinePlayUrl", "dashPlayUrl")
+                encryptedDash = findFirstMatchingString(contentData) { key ->
+                    val normalized = key.lowercase().replace(Regex("[^a-z0-9]"), "")
+                    (normalized.contains("dash") && normalized.contains("playurl")) ||
+                        normalized == "playurl" ||
+                        normalized == "dashurl" ||
+                        normalized.endsWith("playurl")
+                }
                 if (!encryptedDash.isNullOrBlank()) {
                     break
                 }
@@ -744,22 +750,23 @@ internal class TataHttpServer(
         }
     }
 
-    private fun findFirstString(value: Any?, vararg keys: String): String? {
+    private fun findFirstMatchingString(value: Any?, keyPredicate: (String) -> Boolean): String? {
         return when (value) {
             is JSONObject -> {
-                for (key in keys) {
-                    val direct = value.optString(key, "").trim()
-                    if (direct.isNotBlank()) return direct
-                }
-
                 value.keys().forEach { key ->
-                    findFirstString(value.opt(key), *keys)?.let { return it }
+                    val child = value.opt(key)
+                    if (child is String && keyPredicate(key)) {
+                        val direct = child.trim()
+                        if (direct.isNotBlank()) return direct
+                    }
+
+                    findFirstMatchingString(child, keyPredicate)?.let { return it }
                 }
                 null
             }
             is JSONArray -> {
                 for (index in 0 until value.length()) {
-                    findFirstString(value.opt(index), *keys)?.let { return it }
+                    findFirstMatchingString(value.opt(index), keyPredicate)?.let { return it }
                 }
                 null
             }
