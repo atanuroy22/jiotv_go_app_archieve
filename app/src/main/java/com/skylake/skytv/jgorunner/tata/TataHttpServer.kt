@@ -458,6 +458,7 @@ internal class TataHttpServer(
         val credFile = File(dataDir, "guest-device.cred")
         val cred = readJsonFile(credFile)
         val deviceId = cred?.optString("deviceId", "").orEmpty()
+        val anonymousId = cred?.optString("anonymousId", "").orEmpty()
 
         val cachedEntry = cacheData.optJSONObject(id)
         if (cachedEntry != null) {
@@ -469,7 +470,7 @@ internal class TataHttpServer(
         }
 
         if (mpdUrl.isBlank()) {
-            val apiId = if (id.startsWith("ts")) id else "ts$id"
+            val apiId = id.removePrefix("ts")
             val contentUrl = TataConstants.CONTENT_API_PREFIX + apiId
             val contentRequest = Request.Builder()
                 .url(contentUrl)
@@ -477,6 +478,10 @@ internal class TataHttpServer(
                 .addHeader("Authorization", "Bearer $userToken")
                 .addHeader("subscriberId", subscriberId)
                 .addHeader("deviceid", deviceId)
+                .addHeader("anonymousid", anonymousId)
+                .addHeader("platform", "BINGE_ANYWHERE")
+                .addHeader("Origin", "https://www.tataplaybinge.com")
+                .addHeader("Referer", "https://www.tataplaybinge.com/")
                 .addHeader("User-Agent", TataConstants.UA)
                 .build()
             Log.d("TataHttpServer", "Fetching manifest from: $contentUrl")
@@ -693,7 +698,12 @@ internal class TataHttpServer(
             val clean = encryptedUrl.substringBefore("#")
             val decoded = android.util.Base64.decode(clean, android.util.Base64.DEFAULT)
             val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
-            val secretKey = SecretKeySpec(key.toByteArray(), "AES")
+
+            val keyBytes = ByteArray(16)
+            val rawKey = key.toByteArray()
+            System.arraycopy(rawKey, 0, keyBytes, 0, rawKey.size.coerceAtMost(16))
+
+            val secretKey = SecretKeySpec(keyBytes, "AES")
             cipher.init(Cipher.DECRYPT_MODE, secretKey)
             String(cipher.doFinal(decoded))
         } catch (_: Exception) {
