@@ -142,25 +142,27 @@ fun CloudPlayerScreen(
                 val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
 
                 if (url.contains("jio.com", true) || url.contains("webplay.fun", true)) {
-                    builder.header("User-Agent", jioUA)
-                    builder.header("os", "android")
-                    builder.header("devicetype", "phone")
-                    builder.header("uniqueId", androidId)
-                    builder.header("deviceId", androidId)
-                    builder.header("appname", "com.jio.jiotv")
-                    builder.header("versionCode", "323")
-                    builder.header("X-Jio-Network-Type", "WIFI")
-                    builder.header("X-Requested-With", "com.jio.jiotv")
-                    builder.header("Origin", "https://www.jio.com")
-                    builder.header("Referer", "https://www.jio.com/")
+                    if (request.header("User-Agent").isNullOrBlank()) {
+                        builder.header("User-Agent", jioUA)
+                    }
+                    if (request.header("os").isNullOrBlank()) builder.header("os", "android")
+                    if (request.header("devicetype").isNullOrBlank()) builder.header("devicetype", "phone")
+                    if (request.header("uniqueId").isNullOrBlank()) builder.header("uniqueId", androidId)
+                    if (request.header("deviceId").isNullOrBlank()) builder.header("deviceId", androidId)
+                    if (request.header("appname").isNullOrBlank()) builder.header("appname", "com.jio.jiotv")
+                    if (request.header("versionCode").isNullOrBlank()) builder.header("versionCode", "323")
+                    if (request.header("X-Jio-Network-Type").isNullOrBlank()) builder.header("X-Jio-Network-Type", "WIFI")
+                    if (request.header("X-Requested-With").isNullOrBlank()) builder.header("X-Requested-With", "com.jio.jiotv")
+                    if (request.header("Origin").isNullOrBlank()) builder.header("Origin", "https://www.jio.com")
+                    if (request.header("Referer").isNullOrBlank()) builder.header("Referer", "https://www.jio.com/")
                 }
 
                 if (url.contains("alex4528.site", true)) {
-                    builder.header("Origin", "https://alex4528.site")
-                    builder.header("Referer", "https://alex4528.site/")
-                    builder.header("Sec-Fetch-Mode", "cors")
-                    builder.header("Sec-Fetch-Site", "same-origin")
-                    builder.header("Sec-Fetch-Dest", "empty")
+                    if (request.header("Origin").isNullOrBlank()) builder.header("Origin", "https://alex4528.site")
+                    if (request.header("Referer").isNullOrBlank()) builder.header("Referer", "https://alex4528.site/")
+                    if (request.header("Sec-Fetch-Mode").isNullOrBlank()) builder.header("Sec-Fetch-Mode", "cors")
+                    if (request.header("Sec-Fetch-Site").isNullOrBlank()) builder.header("Sec-Fetch-Site", "same-origin")
+                    if (request.header("Sec-Fetch-Dest").isNullOrBlank()) builder.header("Sec-Fetch-Dest", "empty")
                 }
 
                 chain.proceed(builder.build())
