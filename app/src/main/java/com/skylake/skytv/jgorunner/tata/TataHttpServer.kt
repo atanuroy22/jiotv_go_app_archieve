@@ -470,7 +470,7 @@ internal class TataHttpServer(
         }
 
         if (mpdUrl.isBlank()) {
-            val apiId = id.removePrefix("ts")
+            val apiId = if (id.startsWith("ts")) id else "ts$id"
             val contentUrl = TataConstants.CONTENT_API_PREFIX + apiId
             val contentRequest = Request.Builder()
                 .url(contentUrl)
