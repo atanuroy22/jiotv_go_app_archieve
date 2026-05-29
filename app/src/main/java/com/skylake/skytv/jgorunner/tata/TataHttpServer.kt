@@ -697,15 +697,20 @@ internal class TataHttpServer(
                 .addHeader("Origin", "https://watch.tataplay.com")
                 .build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
+                if (!response.isSuccessful) {
+                    Log.d("TataHttpServer", "Fetch MPD failed: ${response.code} for $url")
+                    return null
+                }
                 val body = response.body?.string()
-                if (body != null && body.trim().startsWith("<")) {
+                if (body != null && body.contains("<MPD", ignoreCase = true)) {
                     body
                 } else {
+                    Log.d("TataHttpServer", "Invalid MPD body (starts with: ${body?.take(20)}) for $url")
                     null
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e("TataHttpServer", "Fetch MPD Exception: ${e.message} for $url")
             null
         }
     }
