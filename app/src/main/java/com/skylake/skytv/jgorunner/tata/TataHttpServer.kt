@@ -497,8 +497,11 @@ internal class TataHttpServer(
                 if (!location.isNullOrBlank()) location.substringBefore("&") else directUrl
             }
 
-            if (candidateUrl.isNotBlank() && fetchMpd(candidateUrl) != null) {
+            val mpdCheck = if (candidateUrl.isNotBlank()) fetchMpd(candidateUrl) else null
+            if (mpdCheck != null) {
                 mpdUrl = candidateUrl
+            } else if (candidateUrl.isNotBlank()) {
+                Log.d("TataHttpServer", "Initial manifest fetch failed for: $candidateUrl")
             }
         }
 
@@ -695,7 +698,12 @@ internal class TataHttpServer(
                 .build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return null
-                response.body?.string()
+                val body = response.body?.string()
+                if (body != null && body.trim().startsWith("<")) {
+                    body
+                } else {
+                    null
+                }
             }
         } catch (_: Exception) {
             null
