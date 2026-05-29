@@ -455,6 +455,10 @@ internal class TataHttpServer(
         val cacheData = readJsonFile(cacheFile) ?: JSONObject()
         var mpdUrl = ""
 
+        val credFile = File(dataDir, "guest-device.cred")
+        val cred = readJsonFile(credFile)
+        val deviceId = cred?.optString("deviceId", "").orEmpty()
+
         val cachedEntry = cacheData.optJSONObject(id)
         if (cachedEntry != null) {
             val cachedUrl = cachedEntry.optString("url", "")
@@ -465,15 +469,22 @@ internal class TataHttpServer(
         }
 
         if (mpdUrl.isBlank()) {
-            val contentUrl = TataConstants.CONTENT_API_PREFIX + id
+            val apiId = if (id.startsWith("ts")) id else "ts$id"
+            val contentUrl = TataConstants.CONTENT_API_PREFIX + apiId
             val contentRequest = Request.Builder()
                 .url(contentUrl)
                 .get()
                 .addHeader("Authorization", "Bearer $userToken")
                 .addHeader("subscriberId", subscriberId)
+                .addHeader("deviceid", deviceId)
                 .addHeader("User-Agent", TataConstants.UA)
                 .build()
-            val responseText = client.newCall(contentRequest).execute().use { it.body?.string() }
+            Log.d("TataHttpServer", "Fetching manifest from: $contentUrl")
+            val response = client.newCall(contentRequest).execute()
+            val responseText = response.use { it.body?.string() }
+            if (response.code != 200) {
+                Log.e("TataHttpServer", "Content API error ${response.code}: $responseText")
+            }
             val contentData = try { JSONObject(responseText ?: "{}") } catch (_: Exception) { JSONObject() }
             val dataObj = contentData.optJSONObject("data")
             val encryptedDash = dataObj?.optString("dashPlayreadyPlayUrl", "")
