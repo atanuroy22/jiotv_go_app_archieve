@@ -451,7 +451,7 @@ fun CloudPlayerScreen(
                 .setMediaId(ch.id ?: "")
 
             // Resilient MimeType detection
-            val isDash = !isFallbackAttempt &&
+            val isDash =
                 !normalized.contains(".m3u8") &&
                 !normalized.contains(".m3u") &&
                 !normalized.contains("/live/") &&
