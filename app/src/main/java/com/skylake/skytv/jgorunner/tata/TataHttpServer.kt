@@ -471,13 +471,18 @@ internal class TataHttpServer(
                 .get()
                 .addHeader("Authorization", "Bearer $userToken")
                 .addHeader("subscriberId", subscriberId)
+                .addHeader("User-Agent", TataConstants.UA)
                 .build()
             val responseText = client.newCall(contentRequest).execute().use { it.body?.string() }
             val contentData = try { JSONObject(responseText ?: "{}") } catch (_: Exception) { JSONObject() }
-            val encryptedDash = contentData.optJSONObject("data")?.optString("dashPlayreadyPlayUrl", "")
+            val dataObj = contentData.optJSONObject("data")
+            val encryptedDash = dataObj?.optString("dashPlayreadyPlayUrl", "")
+                ?.ifBlank { dataObj.optString("dashWidewinePlayUrl", "") }
+                ?.ifBlank { dataObj.optString("dashPlayUrl", "") }
+
             if (encryptedDash.isNullOrBlank()) {
-                Log.e("TataHttpServer", "dashPlayreadyPlayUrl not found for ID: $id. Response: $responseText")
-                return newFixedLengthResponse(Status.NOT_FOUND, MIME_PLAINTEXT, "dashPlayreadyPlayUrl not found.")
+                Log.e("TataHttpServer", "Manifest URL not found for ID: $id. Response: $responseText")
+                return newFixedLengthResponse(Status.NOT_FOUND, MIME_PLAINTEXT, "Manifest URL not found.")
             }
 
             val decryptedUrl = decryptUrl(encryptedDash, TataConstants.AES_KEY)
