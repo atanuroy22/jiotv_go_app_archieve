@@ -79,6 +79,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import java.net.URLDecoder
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
@@ -276,6 +277,10 @@ fun CloudPlayerScreen(
                 else -> k
             }
             normalizedHeaders[key] = v
+        }
+
+        extractHeaderHintsFromUrl(preferredPlaybackUrl).forEach { (key, value) ->
+            normalizedHeaders[key] = value
         }
 
         playerError = null
@@ -774,6 +779,34 @@ fun CloudPlayerScreen(
             }
         }
     }
+}
+
+private fun extractHeaderHintsFromUrl(rawUrl: String): Map<String, String> {
+    val decoded = runCatching { URLDecoder.decode(rawUrl, Charsets.UTF_8.name()) }.getOrDefault(rawUrl)
+    val hintSection = decoded.substringAfter("|", "")
+    if (hintSection.isBlank()) return emptyMap()
+
+    return hintSection
+        .split('|')
+        .mapNotNull { segment ->
+            val trimmed = segment.trim().trimStart('&')
+            val equalsIndex = trimmed.indexOf('=')
+            if (equalsIndex <= 0 || equalsIndex == trimmed.lastIndex) return@mapNotNull null
+            val key = trimmed.substring(0, equalsIndex).trim()
+            val value = trimmed.substring(equalsIndex + 1).trim()
+            if (key.isBlank() || value.isBlank()) return@mapNotNull null
+
+            val canonicalKey = when (key.lowercase()) {
+                "user-agent", "http-user-agent" -> "User-Agent"
+                "origin" -> "Origin"
+                "referer", "referrer", "http-referrer" -> "Referer"
+                "cookie" -> "Cookie"
+                "x-forwarded-for" -> "X-Forwarded-For"
+                else -> key
+            }
+            canonicalKey to value
+        }
+        .toMap()
 }
 
 @Composable
