@@ -455,11 +455,23 @@ object CloudParsers {
     }
 
     private fun parseM3uFlag(obj: JsonObject): Boolean {
-        val raw = obj.firstStringOf("m3u", "is_m3u", "isM3u", "m3u_playlist", "m3uPlaylist")
-            ?.trim()
-            ?.lowercase()
-            .orEmpty()
-        return raw == "true" || raw == "1" || raw == "yes" || raw == "on"
+        val keys = arrayOf("m3u", "is_m3u", "isM3u", "m3u_playlist", "m3uPlaylist")
+        for (key in keys) {
+            val el = obj.get(key) ?: continue
+            if (!el.isJsonPrimitive) continue
+
+            val primitive = el.asJsonPrimitive
+            if (primitive.isBoolean) return primitive.asBoolean
+
+            val raw = when {
+                primitive.isString -> primitive.asString
+                primitive.isNumber -> primitive.asNumber.toString()
+                else -> continue
+            }.trim().lowercase()
+
+            if (raw == "true" || raw == "1" || raw == "yes" || raw == "on") return true
+        }
+        return false
     }
 
     private fun JsonObject.firstStringOf(vararg keys: String): String? {
