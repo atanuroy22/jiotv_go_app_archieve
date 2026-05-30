@@ -441,7 +441,12 @@ internal class TataHttpServer(
 
     private fun handleGetMpd(session: IHTTPSession): Response {
         val rawId = session.parms["id"].orEmpty()
-        val id = rawId.substringBefore("|").substringBefore("&")
+        val id = rawId.substringBefore("|")
+            .let { s ->
+                val idx = s.indexOf("%7c", ignoreCase = true)
+                if (idx != -1) s.substring(0, idx) else s
+            }
+            .substringBefore("&")
         if (id.isBlank()) {
             return newFixedLengthResponse(Status.BAD_REQUEST, MIME_PLAINTEXT, "Missing content ID.")
         }
@@ -533,7 +538,7 @@ internal class TataHttpServer(
                     .addHeader("deviceid", deviceId)
                     .addHeader("anonymousid", anonymousId)
                     .addHeader("platform", "BINGE_ANYWHERE")
-                    .addHeader("language", "hindi")
+                    .addHeader("language", "hi")
                     .addHeader("locale", "en")
                     .addHeader("Origin", "https://www.tataplaybinge.com")
                     .addHeader("Referer", "https://www.tataplaybinge.com/")
