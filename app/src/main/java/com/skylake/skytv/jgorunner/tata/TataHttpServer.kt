@@ -538,7 +538,7 @@ internal class TataHttpServer(
                     .addHeader("deviceid", deviceId)
                     .addHeader("anonymousid", anonymousId)
                     .addHeader("platform", "BINGE_ANYWHERE")
-                    .addHeader("language", "hi")
+                    .addHeader("language", "hindi")
                     .addHeader("locale", "en")
                     .addHeader("Origin", "https://www.tataplaybinge.com")
                     .addHeader("Referer", "https://www.tataplaybinge.com/")
@@ -604,7 +604,7 @@ internal class TataHttpServer(
         }
 
         val mpdContent = fetchMpd(mpdUrl)
-            ?: return newFixedLengthResponse(Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Failed to fetch MPD content.")
+            ?: return newFixedLengthResponse(Status.NOT_FOUND, MIME_PLAINTEXT, "Manifest not found.")
 
         val baseUrl = mpdUrl.substringBeforeLast("/")
         var processed = mpdContent.replace("dash/", "$baseUrl/dash/")

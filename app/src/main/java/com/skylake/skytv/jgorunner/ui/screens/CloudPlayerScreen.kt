@@ -139,7 +139,7 @@ fun CloudPlayerScreen(
                 val url = request.url.toString()
                 val builder = request.newBuilder()
 
-                val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/131.0.6778.260 Mobile Safari/537.36"
+                val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
 
                 if (url.contains("jio.com", true) || url.contains("webplay.fun", true)) {
                     if (request.header("User-Agent").isNullOrBlank()) {
@@ -350,13 +350,13 @@ fun CloudPlayerScreen(
 
         // >>> JIO HEADERS FIX <<<
         if (playbackUrl.contains("jio.com", true) || playbackUrl.contains("jio.dev", true)) {
-            val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/131.0.6778.260 Mobile Safari/537.36"
+            val jioUA = "JioTV/7.0.8 (Linux; Android 13; Pixel 7 Pro Build/TQ1A.221205.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/110.0.5481.64 Mobile Safari/537.36"
 
             // ALWAYS override User-Agent for Jio domains
             normalizedHeaders["User-Agent"] = jioUA
 
-            if (normalizedHeaders.keys.none { it.equals("Origin", true) }) normalizedHeaders["Origin"] = "https://jiotv.jio.com"
-            if (normalizedHeaders.keys.none { it.equals("Referer", true) }) normalizedHeaders["Referer"] = "https://jiotv.jio.com/"
+            normalizedHeaders["Origin"] = "https://jiotv.jio.com"
+            normalizedHeaders["Referer"] = "https://jiotv.jio.com/"
             if (normalizedHeaders.keys.none { it.equals("X-Requested-With", true) }) normalizedHeaders["X-Requested-With"] = "com.jio.jiotv"
             if (normalizedHeaders.keys.none { it.equals("Accept", true) }) normalizedHeaders["Accept"] = "*/*"
             if (normalizedHeaders.keys.none { it.equals("Accept-Language", true) }) normalizedHeaders["Accept-Language"] = "en-US,en;q=0.9"
