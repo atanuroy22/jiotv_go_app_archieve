@@ -1,6 +1,7 @@
 package com.skylake.skytv.jgorunner.tata
 
 import android.util.Log
+import com.skylake.skytv.jgorunner.utils.LogCollector
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoHTTPD.Response.Status
 import okhttp3.MediaType.Companion.toMediaType
@@ -542,7 +543,9 @@ internal class TataHttpServer(
                 responseText = response.use { it.body?.string() }
                 if (response.code != 200) {
                     lastError = "Content API error ${response.code}: $responseText"
-                    Log.e("TataHttpServer", lastError.orEmpty())
+                    val errMsg = "Content API failed (HTTP ${response.code}) for ID $apiId. Body: ${responseText?.take(500)}"
+                    Log.e("TataHttpServer", errMsg)
+                    LogCollector.log(errMsg)
                     continue
                 }
 
@@ -560,10 +563,9 @@ internal class TataHttpServer(
             }
 
             if (encryptedDash.isNullOrBlank()) {
-                Log.e(
-                    "TataHttpServer",
-                    "Manifest URL not found for ID: $id. Last error: ${lastError.orEmpty()}. Response: ${responseText.orEmpty()}"
-                )
+                val errMsg = "Manifest URL not found for ID: $id (sub: $subscriberId, token: ${userToken.take(10)}...). Last error: ${lastError.orEmpty()}. Response: ${responseText?.take(500)}"
+                Log.e("TataHttpServer", errMsg)
+                LogCollector.log(errMsg)
                 return newFixedLengthResponse(Status.NOT_FOUND, MIME_PLAINTEXT, "Manifest URL not found.")
             }
 
