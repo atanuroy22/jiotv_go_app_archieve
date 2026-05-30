@@ -533,6 +533,8 @@ internal class TataHttpServer(
                     .addHeader("deviceid", deviceId)
                     .addHeader("anonymousid", anonymousId)
                     .addHeader("platform", "BINGE_ANYWHERE")
+                    .addHeader("language", "hindi")
+                    .addHeader("locale", "en")
                     .addHeader("Origin", "https://www.tataplaybinge.com")
                     .addHeader("Referer", "https://www.tataplaybinge.com/")
                     .addHeader("User-Agent", TataConstants.UA)
